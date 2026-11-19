@@ -72,7 +72,7 @@ function carryOverAdmin(facts, prev, nowMs = Date.now()) {
   return prev.fullAt;
 }
 
-function createApp({ store, key, version, runner, autorun = { set: async () => {} }, openTarget = () => {}, now = () => Date.now(), guard = null, drills = null, canary = null, away = null, helper = null, licensePublicKey, realtime = null, notify = null, telegram = null }) {
+function createApp({ store, key, version, runner, autorun = { set: async () => {} }, openTarget = () => {}, now = () => Date.now(), guard = null, drills = null, canary = null, away = null, helper = null, licensePublicKey, realtime = null, notify = null, telegram = null, updateFetch = undefined }) {
   const state = { busy: null, lastSeen: now(), progress: null, port: 0, alerts: [], quietUntil: 0 };
   // Свои изменения системы (исправление, откат, автозапуск, обновление программ) Страж в реальном времени не считает чужими.
   const QUIET_MS = 2 * 60_000;
@@ -703,6 +703,14 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
       const g = guide(String(b.id || ''), report() && report().facts);
       if (!g) throw new HttpError(404, t('Инструкция не найдена'));
       return g;
+    },
+    // Только по кнопке «Проверить обновления»: один запрос списка выпусков на GitHub, ничего не скачивается.
+    'POST /api/update/check': async () => {
+      try {
+        return await require('./update').check({ version, fetch: updateFetch });
+      } catch (e) {
+        throw new HttpError(502, e.message);
+      }
     },
     'POST /api/open': (b) => {
       if (!Object.hasOwn(OPEN_TARGETS, String(b.target))) throw new HttpError(400, t('Неизвестное окно'));

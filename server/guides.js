@@ -48,6 +48,9 @@ const OPEN_TARGETS = {
   'contact-site': { label: t('Сайт'), cmd: [path.join(SYS, 'explorer.exe'), 'https://datadiver-ru.github.io/'] },
   'contact-github': { label: 'GitHub', cmd: [path.join(SYS, 'explorer.exe'), 'https://github.com/datadiver-ru'] },
   'contact-mail': { label: t('Почта'), cmd: [path.join(SYS, 'explorer.exe'), 'mailto:data.diver.ru@gmail.com'] },
+  // Страница загрузки новой версии - по кнопке после «Проверить обновления».
+  download: { label: t('Страница загрузки'), cmd: [path.join(SYS, 'explorer.exe'), 'https://datadiver-ru.github.io/adamant.html'] },
+  'download-en': { label: t('Страница загрузки'), cmd: [path.join(SYS, 'explorer.exe'), 'https://datadiver-ru.github.io/en/adamant.html'] },
 };
 
 function openTarget(name) {

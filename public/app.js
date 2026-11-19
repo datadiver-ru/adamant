@@ -1968,9 +1968,10 @@
       h('h2', { class: 'group', text: T('О программе') }),
       h('div', { class: 'card pad' },
         h('p', null, h('b', { text: F('Адамант {0}', S.data.version) }), ' - ', T('проверка защиты компьютера с Windows и своей сети.')),
+        updateBox(),
         h('p', { class: 'legend', text: LEGEND() }),
         h('ul', { class: 'ev' },
-          h('li', { text: tgEnabled() ? T('Программа не собирает статистику. В интернет уходят только тревоги в ваш Telegram - вы это включили.') : T('Программа ничего не отправляет в интернет и не собирает статистику.') }),
+          h('li', { text: tgEnabled() ? T('Программа не собирает статистику. В интернет уходят только тревоги в ваш Telegram - вы это включили.') : T('Программа сама ничего не отправляет в интернет и не собирает статистику.') }),
           h('li', { text: T('Проверки только читают настройки. Изменения - только по кнопке «Применить», с разрешения администратора и с возможностью отката.') }),
           h('li', { text: T('Проверка сети - только частные адреса ваших адаптеров, без атак и подбора паролей.') })),
         h('p', { class: 'small muted', text: T('Связь с автором: вопросы, предложения и сообщения об уязвимостях.') }),
@@ -1979,6 +1980,33 @@
           onclick: () => api('/api/open', { target: id }).catch((e) => toast(T(e.message), 'error')),
         }, h('b', { text: label() }), h('span', { text: value }))))),
     );
+  }
+
+  /** «Проверить обновления»: по кнопке спрашиваем у GitHub номер последней версии; скачивает браузер, ставит человек. */
+  async function checkUpdate() {
+    S.update = { busy: true };
+    render();
+    try {
+      S.update = { res: await api('/api/update/check', {}) };
+    } catch (e) {
+      S.update = { error: e.message };
+    }
+    render();
+  }
+  function updateBox() {
+    const u = S.update || {};
+    const r = u.res;
+    const lang = S.data.settings.lang === 'en' ? 'download-en' : 'download';
+    const openPage = () => api('/api/open', { target: lang }).catch((e) => toast(T(e.message), 'error'));
+    return h('div', { class: 'update-box' },
+      h('div', { class: 'actions' }, btn(u.busy ? T('Проверяю…') : T('Проверить обновления'), 'small', u.busy ? null : checkUpdate, 'refresh')),
+      r && r.newer ? h('div', { class: 'note warn' }, icon('download'), h('div', { class: 'note-body' },
+        h('b', { text: F('Вышла новая версия: {0}', r.latest) }),
+        h('p', { text: T('Скачайте установщик и запустите его поверх этой версии: настройки, проверки и журнал сохранятся.') }),
+        h('div', { class: 'actions' }, btn(T('Открыть страницу загрузки'), 'primary small', openPage, 'download')))) : null,
+      r && !r.newer ? h('p', { class: 'small', text: F('У вас последняя версия ({0}).', r.current) }) : null,
+      u.error ? h('p', { class: 'small warn-text', text: T(u.error) }) : null,
+      h('p', { class: 'small muted', text: T('По этой кнопке Адамант спрашивает у GitHub только номер последней версии. Сведения о вас и компьютере не отправляются. Сама программа обновления не скачивает и не ставит.') }));
   }
 
   /** Связь с автором (адреса заданы на сервере в OPEN_TARGETS, окно открывает только их). */
@@ -2076,7 +2104,46 @@
       info.free ? h('p', { class: 'muted small', text: info.free }) : null,
       h('div', { class: 'actions' },
         btn(T('Купить полную версию'), 'primary', buyFull, 'gem'),
-        btn(T('У меня есть ключ'), '', () => go('settings'))));
+        btn(T('У меня есть ключ'), '', keyModal, 'lock')));
+  }
+
+  /** Включить ключ (или убрать его - key = null). true - получилось. */
+  async function setLicenseKey(key) {
+    try {
+      S.data.license = await api('/api/license', { key });
+      S.licenseDraft = '';
+      S.bluetooth = null;
+      S.btTried = false;
+      await load();
+      toast(key ? T('Полная версия включена. Спасибо!') : T('Ключ убран. Работает бесплатная версия.'), 'ok');
+      return true;
+    } catch (e) {
+      toast(T(e.message), 'error');
+      return false;
+    } finally {
+      render();
+    }
+  }
+
+  /** «У меня есть ключ»: поле для ключа сразу в окошке, где бы человек ни был. */
+  function keyModal() {
+    modal((box, close) => {
+      const area = h('textarea', { rows: '4', spellcheck: 'false', placeholder: 'ADAMANT1.…', 'aria-label': T('Ключ полной версии') });
+      const submit = async () => {
+        const key = area.value.trim();
+        if (!key) { toast(T('Вставьте ключ полной версии'), 'error'); area.focus(); return; }
+        box.dataset.locked = '1';
+        const ok = await setLicenseKey(key);
+        delete box.dataset.locked;
+        if (ok) close();
+      };
+      box.append(
+        h('h2', { text: T('Ввести ключ') }),
+        h('p', { class: 'muted', text: T('Вставьте ключ, который пришёл после покупки, и нажмите «Активировать». Ключ проверяется на этом компьютере, без интернета.') }),
+        h('div', { class: 'license-key' }, area),
+        h('div', { class: 'foot' }, btn(T('Отмена'), 'ghost', close), btn(T('Активировать'), 'primary', submit, 'lock')));
+      setTimeout(() => area.focus(), 0);
+    });
   }
 
   /** Закрытый раздел: что в нём есть; для Bluetooth - ещё и бесплатная проверка устройств для атак. */
@@ -2102,19 +2169,7 @@
       ? (l.expires ? F('Ключ выдан: {0}. Действует до {1}.', l.licensee, l.expires) : F('Ключ выдан: {0}. Бессрочно.', l.licensee))
       : l.expired ? F('Срок ключа для {0} закончился {1}. Работает бесплатная версия.', l.licensee, l.expires)
         : T('Проверка, находки, исправления, Страж, сеть, роутер, расширения, скачанные файлы, обновление программ, чек-лист и отчёт работают полностью. В полной версии ещё Bluetooth, «Защита входа», «Учения» с приманками, «Пока вас не было», Страж в реальном времени, кнопка «Тревога» и уведомления в Telegram.');
-    const setKey = async (key) => {
-      try {
-        S.data.license = await api('/api/license', { key });
-        S.licenseDraft = '';
-        S.bluetooth = null;
-        S.btTried = false;
-        await load();
-        toast(key ? T('Полная версия включена. Спасибо!') : T('Ключ убран. Работает бесплатная версия.'), 'ok');
-      } catch (e) {
-        toast(T(e.message), 'error');
-      }
-      render();
-    };
+    const setKey = setLicenseKey;
     return h('div', { class: 'card pad' },
       h('div', { class: 'setting' },
         h('div', null, h('b', { text: full ? T('Полная версия') : T('Бесплатная версия') }), h('p', { text })),

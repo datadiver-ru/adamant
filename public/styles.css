@@ -977,3 +977,9 @@ table.ports td.row-act { text-align: right; white-space: nowrap; }
 .extra-item { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
 .extra-item input { margin-top: 3px; }
 .modal .extra-group { max-height: none; }
+
+/* «Проверить обновления» в «О программе» */
+.update-box { margin: 10px 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.update-box .note { margin: 0; }
+.update-box p { margin: 0; }
+.update-box .warn-text { color: var(--high); }

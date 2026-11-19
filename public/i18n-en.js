@@ -2452,5 +2452,17 @@ window.ADAMANT_EN = {
  "порт {0}": "port {0}",
  "проверьте": "check",
  "часть Windows": "part of Windows",
- "Объяснения и кнопка «Закрыть» появятся, когда Адамант перезапустится.": "Explanations and the “Close” button will appear after Adamant restarts."
+ "Объяснения и кнопка «Закрыть» появятся, когда Адамант перезапустится.": "Explanations and the “Close” button will appear after Adamant restarts.",
+ "GitHub не вернул ни одного выпуска. Попробуйте позже.": "GitHub returned no releases. Try again later.",
+ "Вышла новая версия: {0}": "A new version is out: {0}",
+ "Не удалось связаться с GitHub. Проверьте подключение к интернету и попробуйте ещё раз.": "Could not reach GitHub. Check your internet connection and try again.",
+ "Открыть страницу загрузки": "Open the download page",
+ "По этой кнопке Адамант спрашивает у GitHub только номер последней версии. Сведения о вас и компьютере не отправляются. Сама программа обновления не скачивает и не ставит.": "With this button, Adamant asks GitHub only for the latest version number. Nothing about you or your computer is sent. The program itself does not download or install updates.",
+ "Проверить обновления": "Check for updates",
+ "Программа сама ничего не отправляет в интернет и не собирает статистику.": "The program sends nothing to the internet on its own and collects no statistics.",
+ "Скачайте установщик и запустите его поверх этой версии: настройки, проверки и журнал сохранятся.": "Download the installer and run it over this version: settings, checks and the journal are kept.",
+ "Страница загрузки": "Download page",
+ "У вас последняя версия ({0}).": "You have the latest version ({0}).",
+ "Ввести ключ": "Enter key",
+ "Вставьте ключ, который пришёл после покупки, и нажмите «Активировать». Ключ проверяется на этом компьютере, без интернета.": "Paste the key you received after purchase and press “Activate”. The key is checked on this computer, without the internet."
 }
