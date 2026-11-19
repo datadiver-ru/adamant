@@ -1,0 +1,104 @@
+ЛИЦЕНЗИЯ АДАМАНТА, версия 1.0
+Copyright (c) 2026 Data Diver (github.com/datadiver-ru). Все права защищены.
+
+Код Адаманта открыт для просмотра, но это не свободная лицензия. Программой можно
+пользоваться и проверять её; распространять, продавать и переделывать нельзя.
+Устанавливая или используя программу, вы принимаете эти условия.
+
+1. Термины
+   «Программа» - Адамант: исходный код, установщик, архив и всё, что в них входит.
+   «Автор» - правообладатель, указанный выше.
+   «Ключ» - ключ полной версии, выданный Автором.
+
+2. Что можно
+   2.1. Бесплатная версия: устанавливать и пользоваться на любом числе компьютеров,
+        дома и на работе, бесплатно.
+   2.2. Полная версия: пользоваться с действующим Ключом на условиях, на которых он выдан.
+   2.3. Читать исходный код, собирать и запускать Программу, чтобы проверить, как она
+        работает, и исследовать её безопасность.
+   2.4. Сообщать Автору об ошибках и уязвимостях.
+   2.5. Передавать другим неизменённый официальный установщик или ссылку на официальную
+        страницу Программы.
+
+3. Что нельзя
+   3.1. Продавать Программу, сдавать её в аренду, распространять за плату или в составе
+        других продуктов и услуг.
+   3.2. Распространять изменённые версии Программы или её части.
+   3.3. Удалять, обходить, отключать или подделывать проверку Ключа; выпускать, продавать
+        или распространять Ключи; передавать свой Ключ другим.
+   3.4. Использовать код Программы или его части в своих программах.
+   3.5. Удалять или изменять уведомления об авторских правах и эту лицензию.
+
+4. Предложения изменений
+   Присылая Автору изменения (например, pull request), вы разрешаете Автору бесплатно
+   использовать их в Программе на любых условиях.
+
+5. Без гарантий
+   Программа предоставляется «как есть». Она помогает найти слабые места и исправить их,
+   но не гарантирует полную защиту от взлома, вирусов и потери данных. Исправления меняют
+   настройки Windows только по вашей кнопке и с разрешения администратора; перед этим
+   программа показывает, что изменится, и даёт откат. Автор не отвечает за убытки,
+   возникшие из-за использования или невозможности использования Программы, в пределах,
+   допустимых законом.
+
+6. Прекращение
+   При нарушении этих условий право пользоваться Программой прекращается. Права,
+   которые даёт закон, эта лицензия не ограничивает.
+
+7. Связь
+   Telegram @data_diver_ru, почта data.diver.ru@gmail.com.
+
+При расхождении русского и английского текста действует русский.
+
+--------------------------------------------------------------------------------
+
+ADAMANT LICENSE, version 1.0
+Copyright (c) 2026 Data Diver (github.com/datadiver-ru). All rights reserved.
+
+Adamant's source code is available to read, but this is not a free or open-source
+license. You may use and inspect the program; you may not redistribute, sell or modify it.
+By installing or using the program you accept these terms.
+
+1. Terms
+   "Program" - Adamant: the source code, installer, archive and everything they contain.
+   "Author" - the copyright holder named above.
+   "Key" - a full version key issued by the Author.
+
+2. You may
+   2.1. Free version: install and use it on any number of computers, at home and at work,
+        free of charge.
+   2.2. Full version: use it with a valid Key on the terms under which the Key was issued.
+   2.3. Read the source code, build and run the Program to check how it works and to
+        research its security.
+   2.4. Report bugs and vulnerabilities to the Author.
+   2.5. Pass on the unmodified official installer or a link to the Program's official page.
+
+3. You may not
+   3.1. Sell or rent the Program, distribute it for a fee or as part of other products
+        or services.
+   3.2. Distribute modified versions of the Program or its parts.
+   3.3. Remove, bypass, disable or forge the Key check; issue, sell or distribute Keys;
+        share your Key with others.
+   3.4. Use the Program's code or parts of it in your own programs.
+   3.5. Remove or change copyright notices or this license.
+
+4. Contributions
+   By sending the Author changes (for example, a pull request), you allow the Author to
+   use them in the Program free of charge on any terms.
+
+5. No warranty
+   The Program is provided "as is". It helps find and fix weak spots but does not
+   guarantee complete protection against hacking, viruses or data loss. Fixes change
+   Windows settings only when you press the button and grant administrator permission;
+   the Program first shows what will change and offers an undo. To the extent permitted
+   by law, the Author is not liable for losses arising from the use of, or inability to
+   use, the Program.
+
+6. Termination
+   If you break these terms, your right to use the Program ends. This license does not
+   limit the rights you have by law.
+
+7. Contact
+   Telegram @data_diver_ru, email data.diver.ru@gmail.com.
+
+If the Russian and English texts differ, the Russian text prevails.

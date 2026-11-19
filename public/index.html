@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <title>Адамант</title>
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/i18n-en.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <noscript>Для работы программы нужен JavaScript. JavaScript is required.</noscript>
+  <!-- Заставка при запуске: Кира поднимает меч, из острия расходятся лучи. Убирает app.js, когда окно готово. -->
+  <div id="splash" aria-hidden="true">
+    <div class="sp-stage">
+      <div class="sp-img"></div>
+      <div class="sp-tip"><div class="sp-rays"></div><div class="sp-flare"></div><div class="sp-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    </div>
+    <div class="sp-title"><b>ΑΔΑΜΑΣ</b><span class="sp-line"><i></i></span></div>
+  </div>
+  <div id="app"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>
