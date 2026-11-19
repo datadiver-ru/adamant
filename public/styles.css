@@ -956,3 +956,24 @@ tr.row-warn td { background: color-mix(in srgb, var(--high) 8%, transparent); }
 .tg-token { flex: 1; min-width: 0; font: 12.5px var(--mono); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(143, 195, 255, .2); background: rgba(0, 0, 0, .25); color: var(--ink); }
 .tg-events { display: grid; gap: 8px; margin: 14px 0 4px; }
 .card.pad > .actions { margin-top: 12px; }
+
+/* Порты: оценка, сводка, «Закрыть лишнее» */
+.tag.bad { background: var(--critical-soft); color: var(--critical); }
+.tag.warn { background: var(--high-soft); color: var(--high); }
+table.ports tr.clickable { cursor: pointer; }
+table.ports tr.clickable:hover td { background: rgba(156, 199, 242, .05); }
+table.ports td .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 46ch; }
+table.ports td.row-act { text-align: right; white-space: nowrap; }
+.ports-sum .ports-counts { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-bottom: 8px; }
+.ports-counts > div { display: flex; flex-direction: column; min-width: 70px; }
+.ports-counts b { font-size: 22px; line-height: 1.1; color: var(--ink); }
+.ports-counts span { font-size: 12px; color: var(--ink-3); }
+.ports-counts .pc-close b { color: var(--critical); }
+.ports-counts .pc-unknown b { color: var(--high); }
+.ports-counts .pc-blocked b { color: var(--ok); }
+.ports-sum .actions { margin-top: 10px; }
+.extra-group + .extra-group { margin-top: 14px; }
+.extra-group h3 { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
+.extra-item { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+.extra-item input { margin-top: 3px; }
+.modal .extra-group { max-height: none; }

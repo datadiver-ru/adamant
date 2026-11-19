@@ -150,6 +150,42 @@ function Autostart-Spec($a) {
   return @(@{ path = $path; name = $name; value = [Convert]::ToBase64String($bytes); kind = 'Binary'; what = (Msg 'Автозагрузка: {0}' $name) })
 }
 
+# ---------- Закрыть порт: правило брандмауэра «не пускать из сети» ----------
+# Тот же список - в server/ports.js (NEVER): без этих портов пропадёт сеть или сломается Windows.
+$NeverPorts = @('udp:67', 'udp:68', 'udp:546', 'udp:547', 'tcp:135', 'udp:123')
+function PortBlock-Specs($a) {
+  $items = @($a.items)
+  if ($items.Count -lt 1 -or $items.Count -gt 40) { throw 'Неверный список портов' }
+  $cat = @{ Public = 'Public'; Private = 'Private'; DomainAuthenticated = 'Domain' }
+  $active = @{}
+  foreach ($n in @(Get-NetConnectionProfile)) { $p = $cat[[string]$n.NetworkCategory]; if ($p) { $active[$p] = $true } }
+  $off = @(Get-NetFirewallProfile | Where-Object { [string]$_.Enabled -ne 'True' -and ($active.Count -eq 0 -or $active.ContainsKey([string]$_.Name)) })
+  if ($off.Count) { throw 'Брандмауэр выключен, и правило не сработает. Сначала включите брандмауэр.' }
+  $win = [IO.Path]::GetFullPath($env:SystemRoot).TrimEnd('\') + '\'
+  $specs = @()
+  foreach ($i in $items) {
+    $rule = [ordered]@{ name = 'Adamant-Block-' + [guid]::NewGuid().ToString('N').Substring(0, 12) }
+    if ([string]$i.kind -eq 'program') {
+      $path = [string]$i.path
+      if ($path.Length -lt 4 -or $path.Length -gt 260 -or $path -match '[\x00-\x1f"*?<>|]' -or $path -notmatch '^[A-Za-z]:\\') { throw 'Недопустимый путь программы' }
+      $full = [IO.Path]::GetFullPath($path)
+      if ($full.StartsWith($win, [StringComparison]::OrdinalIgnoreCase)) { throw 'Программы Windows так закрывать нельзя' }
+      if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw 'Программа не найдена - обновите проверку' }
+      $rule.kind = 'program'; $rule.path = $full
+      $rule.display = 'Адамант: не пускать из сети - ' + (Split-Path -Leaf $full)
+    } else {
+      $proto = [string]$i.proto; $port = 0
+      if ($proto -notin @('tcp', 'udp') -or -not [int]::TryParse([string]$i.port, [ref]$port) -or $port -lt 1 -or $port -gt 49151) { throw 'Недопустимый порт' }
+      if ($NeverPorts -contains ($proto + ':' + $port)) { throw 'Этот порт закрывать нельзя: без него сломается сеть или Windows' }
+      $rule.kind = 'port'; $rule.proto = $proto; $rule.port = $port
+      $rule.display = 'Адамант: закрыт порт ' + $proto.ToUpper() + ' ' + $port
+    }
+    $specs += $rule
+  }
+  return $specs
+}
+function PortBlock-What($r) { if ([string]$r.kind -eq 'program') { return (Msg 'Программа «{0}»' (Split-Path -Leaf ([string]$r.path))) } else { return (Msg 'Порт {0} {1}' ([string]$r.proto).ToUpper() ([int]$r.port)) } }
+
 $Fixes = @{
   'firewall-on' = @{
     capture = { param($a) @(Get-NetFirewallProfile | ForEach-Object { [ordered]@{ name = [string]$_.Name; enabled = [string]$_.Enabled } }) }
@@ -232,6 +268,23 @@ $Fixes = @{
     capture = { param($a) $s = Autostart-Spec $a; [ordered]@{ specs = $s; regs = (Reg-Capture $s) } }
     change = { param($a, $b) Reg-Change $b.specs $b.regs | Out-Null; @{ changes = @(Change $b.specs[0].what (Msg 'запускается') (Msg 'отключена')) } }
     undo = { param($b) Reg-Undo $b.regs | Out-Null; @(Change $b.specs[0].what (Msg 'восстановлено') (Msg 'запускается')) }
+  }
+  # Программа не останавливается: брандмауэр просто не пускает к ней подключения с других устройств.
+  # Откат удаляет только свои правила - по имени Adamant-Block-…, записанному до изменения.
+  'port-block' = @{
+    capture = { param($a) [ordered]@{ rules = @(PortBlock-Specs $a) } }
+    change = { param($a, $b)
+      $ch = @()
+      foreach ($r in @($b.rules)) {
+        $p = @{ Name = [string]$r.name; DisplayName = [string]$r.display; Group = 'Адамант'; Direction = 'Inbound'; Action = 'Block'; Profile = 'Any'; Enabled = 'True' }
+        if ([string]$r.kind -eq 'program') { $p.Program = [string]$r.path } else { $p.Protocol = ([string]$r.proto).ToUpper(); $p.LocalPort = [string]$r.port }
+        New-NetFirewallRule @p | Out-Null
+        if (-not (Get-NetFirewallRule -Name ([string]$r.name) -ErrorAction SilentlyContinue)) { throw 'Правило брандмауэра не появилось' }
+        $ch += Change (PortBlock-What $r) (Msg 'открыт для сети') (Msg 'закрыт брандмауэром')
+      }
+      @{ changes = $ch }
+    }
+    undo = { param($b) @(@($b.rules) | ForEach-Object { Remove-NetFirewallRule -Name ([string]$_.name) -ErrorAction SilentlyContinue; Change (PortBlock-What $_) (Msg 'восстановлено') (Msg 'открыт для сети') }) }
   }
 }
 foreach ($k in $RegFixes.Keys) {

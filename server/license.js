@@ -19,7 +19,7 @@ const VENDOR_PUBLIC_KEY = 'MCowBQYDK2VwAyEAR0zTblNtnyFpJ2NKej+AOWuiZtdwPOvf4MvD+
 const PREFIX = 'ADAMANT1';
 
 /** Разделы полной версии. */
-const FEATURES = ['bluetooth', 'entry', 'drills', 'away', 'realtime', 'panic', 'telegram'];
+const FEATURES = ['bluetooth', 'entry', 'drills', 'away', 'realtime', 'panic', 'telegram', 'ports'];
 
 function publicKey(b64 = VENDOR_PUBLIC_KEY) {
   return crypto.createPublicKey({ key: Buffer.from(b64, 'base64'), format: 'der', type: 'spki' });

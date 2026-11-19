@@ -150,6 +150,7 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
   async function applyFix({ id, arg }) {
     if (state.busy) throw new HttpError(409, t('Подождите: идёт другая операция'));
     const facts = currentFacts();
+    bulkPorts(id, arg);
     let a;
     try {
       a = fixes.validate(id, facts, arg);
@@ -381,6 +382,10 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
   }
   const licenseStatus = () => license.status(currentLicense());
   const paid = (f) => !!licenseStatus().features[f];
+  /** «Закрыть лишнее» (несколько портов сразу) - в полной версии; по одному порту - во всех. */
+  function bulkPorts(id, arg) {
+    if (id === 'port-block' && arg && Array.isArray(arg.items) && arg.items.length > 1) needPaid('ports');
+  }
   function needPaid(f) {
     if (!paid(f)) throw new HttpError(402, t('Это доступно в полной версии'), 'PAID');
   }
@@ -648,6 +653,7 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
       realtime: realtime ? { ...safe(() => realtime.status(), {}), log: store.read('realtime-log.json', []).slice(0, 50) } : null,
       away: away && paid('away') ? safe(() => away.report({ days: 14 }), null) : null,
       panic: store.read('panic.json', null),
+      ports: safe(() => (report() ? require('./ports').annotate(report().facts, store.journal()) : null), null),
       telegram: telegram ? safe(() => telegram.status(), null) : null,
     }),
     'POST /api/panic': (b) => panic({ mode: (b && b.mode) === 'restore' ? 'restore' : 'isolate' }),
@@ -683,6 +689,7 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
     },
     'POST /api/check': (b) => runCheck(!!b.full),
     'POST /api/fix/plan': (b) => {
+      bulkPorts(String(b.id || ''), b.arg);
       try {
         return fixes.plan(String(b.id || ''), currentFacts(), b.arg);
       } catch (e) {

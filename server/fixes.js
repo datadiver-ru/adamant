@@ -125,6 +125,22 @@ const FIXES = {
       return { loc: item.loc, name: item.name, userSid: sid };
     },
   },
+  'port-block': {
+    title: t('Закрыть порты брандмауэром'),
+    changes: (f, a) => arr(a.items).map((i) => ({
+      what: i.kind === 'program' ? tx('Программа «{0}»', i.name) : tx('Порт {0} {1} - {2}', i.proto.toUpperCase(), i.port, i.name),
+      from: t('открыт для сети'),
+      to: t('закрыт брандмауэром'),
+    })),
+    commands: ['New-NetFirewallRule -Group Адамант -Direction Inbound -Action Block -Protocol <TCP|UDP> -LocalPort <порт>', 'New-NetFirewallRule -Group Адамант -Direction Inbound -Action Block -Program <программа>   (если номер порта меняется)'],
+    notes: (f, a) => [
+      t('Программы не удаляются и не останавливаются: брандмауэр просто не пускает к ним подключения с других устройств.'),
+      ...arr(a.items).filter((i) => i.breaks).map((i) => tx('{0}: {1}', i.kind === 'program' ? i.name : tx('порт {0}', i.port), i.breaks)),
+      t('Открыть обратно можно кнопкой «Открыть обратно» у порта или в разделе «Исправления».'),
+    ],
+    arg: (f, a) => require('./ports').validateBlock(f, a),
+    scriptArg: (a) => require('./ports').toScript(a),
+  },
 };
 
 // ---------------------------------------------------------------- Защита от взлома (rules-deep.js) и физический доступ
@@ -453,7 +469,8 @@ function scriptArgs(action, { id, arg, record } = {}) {
   if (action === 'apply') {
     if (!FIXES[id]) throw new Error(t('Неизвестное исправление'));
     const out = ['-Action', 'apply', '-Id', id];
-    if (arg) out.push('-Arg', Buffer.from(JSON.stringify(arg), 'utf8').toString('base64'));
+    const sa = arg && FIXES[id].scriptArg ? FIXES[id].scriptArg(arg) : arg;
+    if (sa) out.push('-Arg', Buffer.from(JSON.stringify(sa), 'utf8').toString('base64'));
     return out;
   }
   if (action === 'undo') {

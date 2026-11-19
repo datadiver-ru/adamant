@@ -1082,40 +1082,149 @@
     return h('div', { class: 'page' }, h('div', { class: 'empty' }, h('p', { text: T('Сначала проведите проверку.') }), h('p', null, btn(T('Проверить компьютер'), 'primary', () => runCheck(false), 'shield'))));
   }
 
+  /** Оценка порта: подпись и цвет метки. */
+  const VERDICT = {
+    close: { cls: 'bad', label: () => T('Лучше закрыть') },
+    unknown: { cls: 'warn', label: () => T('Проверьте') },
+    optional: { cls: '', label: () => T('Можно закрыть') },
+    normal: { cls: 'local', label: () => T('Нормально') },
+    system: { cls: 'local', label: () => T('Часть Windows') },
+    local: { cls: 'local', label: () => T('Только этот ПК') },
+  };
+  const kids = (...a) => a.flat(Infinity).filter((c) => c != null && c !== false);
+  const portTitle = (x) => F('Порт {0} {1}', x.proto.toUpperCase(), x.port);
+
+  function closePorts(items) {
+    openFix({ id: 'port-block', arg: { items: items.map((c) => (c.kind === 'program' ? { kind: 'program', path: c.path } : { kind: 'port', proto: c.proto, port: c.port })) } });
+  }
+  function reopenPort(record) {
+    const e = ((S.data && S.data.journal) || []).find((j) => j.record === record);
+    if (e) confirmUndo(e);
+  }
+
+  /** Подробно о порте: что это, кто открыл, что будет, если закрыть. */
+  function portModal(x) {
+    modal((box, close) => {
+      const v = VERDICT[x.info.verdict] || VERDICT.optional;
+      box.append(...kids(
+        h('h2', { text: `${portTitle(x)} - ${L(x.info.name)}` }),
+        h('p', { class: 'intro' }, h('span', { class: 'tag ' + v.cls, text: v.label() })),
+        h('p', { text: L(x.info.what) }),
+        h('ul', { class: 'ev' },
+          h('li', { text: F('Программа: {0}', x.proc || '-') }),
+          x.path ? h('li', { class: 'muted small', text: x.path }) : null,
+          x.services && x.services.length ? h('li', { text: F('Службы: {0}', x.services.join(', ')) }) : null,
+          h('li', { text: x.scope === 'net' ? T('Ждёт подключений со всей сети') : x.scope === 'local' ? T('Ждёт подключений только с этого компьютера') : F('Ждёт подключений на адресе {0}', x.addrs.join(', ')) })),
+        x.close && x.info.breaks ? h('div', { class: 'note' }, icon('info'), h('div', null, h('b', { text: T('Если закрыть') }), h('p', { text: L(x.info.breaks) }))) : null,
+        x.why ? h('p', { class: 'muted', text: L(x.why) }) : null,
+        h('div', { class: 'foot' },
+          x.blocked ? btn(T('Открыть обратно…'), '', () => { close(); reopenPort(x.blocked); }) : null,
+          !x.blocked && x.close ? btn(T('Закрыть порт…'), 'primary', () => { close(); closePorts([x.close]); }, 'lock') : null,
+          btn(T('Понятно'), x.close && !x.blocked ? '' : 'primary', close)),
+      ));
+    });
+  }
+
+  /** «Закрыть лишнее»: Адамант отмечает то, что дома обычно не нужно, человек снимает галочки. */
+  function closeExtraModal(list) {
+    if (!paid('ports')) {
+      return modal((box, close) => box.append(h('h2', { text: T('Закрыть лишнее') }), paidCard('ports'), h('div', { class: 'foot' }, btn(T('Понятно'), '', close))));
+    }
+    const groups = [
+      { title: T('Лучше закрыть'), list: list.filter((x) => x.info.verdict === 'close'), on: () => true },
+      { title: T('Можно закрыть, если не пользуетесь'), list: list.filter((x) => x.info.verdict === 'optional'), on: (x) => x.info.home },
+      { title: T('Незнакомые программы'), list: list.filter((x) => x.info.verdict === 'unknown'), on: () => false },
+    ].filter((g) => g.list.length);
+    const picked = new Map();
+    for (const g of groups) for (const x of g.list) picked.set(x, g.on(x));
+    modal((box, close) => {
+      const go2 = btn('', 'primary', () => {
+        const items = [...picked].filter(([, on]) => on).map(([x]) => x.close);
+        close();
+        closePorts(items);
+      }, 'lock');
+      const count = () => {
+        const n = [...picked.values()].filter(Boolean).length;
+        go2.disabled = !n;
+        go2.lastChild.textContent = F('Закрыть выбранные: {0}…', n);
+      };
+      go2.append(document.createTextNode(''));
+      box.append(...kids(
+        h('h2', { text: T('Закрыть лишнее') }),
+        h('p', { class: 'intro', text: T('Адамант отметил порты, которые дома обычно не нужны. Снимите галочку с того, чем пользуетесь. Ничего не закроется, пока вы не подтвердите на следующем шаге.') }),
+        groups.length ? groups.map((g) => h('div', { class: 'extra-group' },
+          h('h3', { text: g.title }),
+          g.list.map((x) => h('label', { class: 'check extra-item' },
+            h('input', { type: 'checkbox', checked: picked.get(x) || null, onchange: (e) => { picked.set(x, e.target.checked); count(); } }),
+            h('div', null,
+              h('b', { text: `${portTitle(x)} - ${L(x.info.name)}` }),
+              h('div', { class: 'muted small', text: x.proc || '' }),
+              x.info.breaks ? h('div', { class: 'small', text: F('Если закрыть: {0}', L(x.info.breaks)) }) : null))))) : h('p', { class: 'muted', text: T('Лишнего нет: всё, что открыто в сеть, нужно Windows или уже закрыто.') }),
+        h('div', { class: 'foot' }, btn(T('Отмена'), '', close), groups.length ? go2 : null),
+      ));
+      count();
+    });
+  }
+
+  function oldPorts(facts) {
+    const rows = new Map();
+    for (const x of [...((facts.ports || {}).tcp || []), ...((facts.ports || {}).udp || [])]) {
+      const k = `${x.proto}:${x.port}:${x.pid}`;
+      if (!rows.has(k)) rows.set(k, { ...x, addrs: [] });
+      rows.get(k).addrs.push(x.addr);
+    }
+    const items = [...rows.values()].map((x) => {
+      const scope = x.addrs.some((a) => a === '0.0.0.0' || a === '::') ? 'net' : x.addrs.every((a) => /^127\./.test(a) || a === '::1') ? 'local' : 'addr';
+      return { ...x, scope, info: { name: PORT_NAMES[x.port] || '-', what: '', verdict: scope === 'local' ? 'local' : null }, close: null, why: null, blocked: null };
+    }).sort((a, b) => a.port - b.port || a.proto.localeCompare(b.proto));
+    return { items, firewallOff: [] };
+  }
+
   function viewPorts() {
     const r = report();
     if (!r) return emptyCheck();
-    const p = r.facts.ports || {};
-    const rows = new Map();
-    for (const x of [...(p.tcp || []), ...(p.udp || [])]) {
-      const k = `${x.proto}:${x.port}:${x.pid}`;
-      if (!rows.has(k)) rows.set(k, { ...x, addrs: new Set() });
-      rows.get(k).addrs.add(x.addr);
-    }
-    const scope = (row) => {
-      const a = [...row.addrs];
-      if (a.some((x) => x === '0.0.0.0' || x === '::')) return 'net';
-      if (a.every((x) => /^127\./.test(x) || x === '::1')) return 'local';
-      return 'addr';
-    };
-    const list = [...rows.values()].filter((x) => !S.portsNet || scope(x) !== 'local').sort((a, b) => a.port - b.port || a.proto.localeCompare(b.proto));
+    // Сервер старше окна (программу обновили, а сервер не перезапустили) - показываем порты без объяснений.
+    const old = S.data.ports === undefined;
+    const pi = old ? oldPorts(r.facts) : S.data.ports || { items: [], firewallOff: [] };
+    const all = pi.items || [];
+    const list = all.filter((x) => !S.portsNet || x.scope !== 'local');
     const findings = pcFindings().filter((f) => f.cat === 'ports' && f.sev !== 'ok');
+    const open = all.filter((x) => x.scope !== 'local' && !x.blocked);
+    const extra = open.filter((x) => x.close && ['close', 'optional', 'unknown'].includes(x.info.verdict));
+    // Один порт у нескольких программ (например, 5353) считаем один раз.
+    const n = (v) => new Set(open.filter((x) => x.info.verdict === v).map((x) => x.proto + ':' + x.port)).size;
+    const blocked = all.filter((x) => x.blocked).length;
     return h('div', { class: 'page' },
-      pageHead(T('Открытые порты'), T('Программы и службы, которые ждут подключений. «Вся сеть» - к ним можно подключиться с других устройств, если пропустит брандмауэр.')),
+      pageHead(T('Открытые порты'), T('Порт - это «дверь», через которую другие устройства подключаются к программе на этом компьютере. Нажмите на порт, чтобы узнать, что это и можно ли его закрыть.')),
+      pi.firewallOff && pi.firewallOff.length ? h('div', { class: 'note warn' }, icon('warn'), h('div', { class: 'note-body' },
+        h('b', { text: T('Брандмауэр выключен') }),
+        h('p', { text: T('Пока он выключен, закрыть порты нельзя: к любой программе можно подключиться из сети.') }),
+        h('div', { class: 'actions' }, btn(T('Включить брандмауэр…'), 'primary small', () => openFix({ id: 'firewall-on' }), 'shield')))) : null,
       findings.length ? h('div', { class: 'findings' }, findings.map((f) => findingCard(f))) : null,
+      old ? h('div', { class: 'note' }, icon('info'), h('div', { text: T('Объяснения и кнопка «Закрыть» появятся, когда Адамант перезапустится.') })) : h('div', { class: 'card pad ports-sum' },
+        h('div', { class: 'ports-counts' },
+          [['close', T('лучше закрыть')], ['unknown', T('проверьте')], ['optional', T('можно закрыть')], ['normal', T('нормально')], ['system', T('часть Windows')]]
+            .map(([v, label]) => h('div', { class: 'pc-' + v }, h('b', { class: 'num', text: String(n(v)) }), h('span', { text: label }))),
+          blocked ? h('div', { class: 'pc-blocked' }, h('b', { class: 'num', text: String(blocked) }), h('span', { text: T('закрыл Адамант') })) : null),
+        h('p', { class: 'muted small', text: T('Считаются только порты, к которым можно подключиться с других устройств. Закрытый порт не мешает программе работать на этом компьютере.') }),
+        h('div', { class: 'actions' },
+          btn(T('Закрыть лишнее…'), extra.length ? 'primary' : '', () => closeExtraModal(extra), paid('ports') ? 'shield' : 'lock'))),
       h('div', { class: 'toolbar' },
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: S.portsNet || null, onchange: (e) => { S.portsNet = e.target.checked; render(); } }), T('Только доступные из сети')),
         h('span', { class: 'muted small', text: F('Показано: {0}', list.length) })),
-      h('div', { class: 'card table-wrap' }, h('table', null,
-        h('thead', null, h('tr', null, [T('Порт'), T('Протокол'), T('Доступ'), T('Программа'), T('Службы')].map((x) => h('th', { text: x })))),
+      h('div', { class: 'card table-wrap' }, h('table', { class: 'ports' },
+        h('thead', null, h('tr', null, [T('Порт'), T('Что это'), T('Оценка'), T('Программа'), ''].map((x) => h('th', { text: x })))),
         h('tbody', null, list.map((x) => {
-          const sc = scope(x);
-          return h('tr', { class: findings.some((f) => f.id === 'port-' + x.port) ? 'warn' : null },
-            h('td', null, h('b', { class: 'num', text: String(x.port) }), PORT_NAMES[x.port] ? h('div', { class: 'muted small', text: PORT_NAMES[x.port] }) : null),
-            h('td', { text: x.proto.toUpperCase() }),
-            h('td', null, h('span', { class: 'tag ' + (sc === 'net' ? 'net' : sc === 'local' ? 'local' : ''), text: sc === 'net' ? T('Вся сеть') : sc === 'local' ? T('Только этот ПК') : [...x.addrs].join(', ') })),
-            h('td', null, h('div', { text: x.proc || '-' }), h('div', { class: 'muted small', text: x.path || F('процесс {0}', x.pid) })),
-            h('td', { class: 'muted small', text: (x.services || []).join(', ') || '-' }));
+          const v = x.blocked ? { cls: 'local', label: () => T('Закрыт Адамантом') } : VERDICT[x.info.verdict] || { cls: '', label: () => '-' };
+          return h('tr', { class: 'clickable' + (findings.some((f) => f.id === 'port-' + x.port) && !x.blocked ? ' warn' : ''), onclick: old ? null : () => portModal(x) },
+            h('td', null, h('b', { class: 'num', text: String(x.port) }), h('div', { class: 'muted small', text: x.proto.toUpperCase() })),
+            h('td', null, h('div', { text: L(x.info.name) }), h('div', { class: 'muted small clamp', text: L(x.info.what) })),
+            h('td', null, h('span', { class: 'tag ' + v.cls, text: v.label() }),
+              x.scope === 'addr' ? h('div', { class: 'muted small', title: x.addrs.join(', '), text: x.addrs.length > 2 ? F('{0} и ещё {1}', x.addrs[0], x.addrs.length - 1) : x.addrs.join(', ') }) : null),
+            h('td', null, h('div', { text: x.proc || '-' }), h('div', { class: 'muted small', text: (x.services || []).join(', ') || x.path || F('процесс {0}', x.pid) })),
+            h('td', { class: 'row-act' },
+              x.blocked ? btn(T('Открыть обратно…'), 'small', (e) => { e.stopPropagation(); reopenPort(x.blocked); })
+                : x.close && x.scope !== 'local' ? btn(T('Закрыть…'), 'small', (e) => { e.stopPropagation(); closePorts([x.close]); }) : null));
         })))),
     );
   }
@@ -1939,6 +2048,15 @@
         T('Список программ, запущенных за 30 минут до тревоги, и что делать дальше.'),
         T('Сеть возвращается кнопкой «Вернуть сеть».'),
       ],
+    }),
+    ports: () => ({
+      title: T('Закрыть лишнее'),
+      points: [
+        T('Одна кнопка закрывает все лишние порты: Адамант сам отмечает, что дома обычно не нужно.'),
+        T('Перед закрытием видно, что перестанет работать.'),
+        T('Всё открывается обратно одной кнопкой.'),
+      ],
+      free: T('В бесплатной версии порты закрываются по одному: кнопка «Закрыть» у каждого порта.'),
     }),
     telegram: () => ({
       title: T('Уведомления в Telegram'),

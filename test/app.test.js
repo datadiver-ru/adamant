@@ -454,7 +454,7 @@ test('бесплатная версия: платные разделы закр�
   try {
     const st = (await s.api('GET', '/api/state')).json;
     assert.equal(st.license.edition, 'free');
-    assert.deepEqual(st.license.features, { bluetooth: false, entry: false, drills: false, away: false, realtime: false, panic: false, telegram: false });
+    assert.deepEqual(st.license.features, { bluetooth: false, entry: false, drills: false, away: false, realtime: false, panic: false, telegram: false, ports: false });
     assert.equal(st.bitlockerPlan, null, 'мастер «Защита входа» закрыт');
     assert.equal(st.away, null);
     for (const [route, body] of [['/api/drills/run', { ids: ['eicar'] }], ['/api/canary', { on: true }], ['/api/settings', { away: true }], ['/api/settings', { awayPhoto: true }], ['/api/away/event', { kind: 'lock' }],
