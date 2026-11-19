@@ -983,3 +983,39 @@ table.ports td.row-act { text-align: right; white-space: nowrap; }
 .update-box .note { margin: 0; }
 .update-box p { margin: 0; }
 .update-box .warn-text { color: var(--high); }
+
+/* ---- Знакомство при первом запуске и «Первые шаги» на сводке ---- */
+.modal.welcome { width: min(640px, 100%); }
+.welcome-grid { display: grid; grid-template-columns: 180px 1fr; gap: 22px; align-items: start; }
+.welcome-grid img { width: 180px; height: 180px; border-radius: 14px; object-fit: cover; border: 1px solid var(--ice-line-hi); box-shadow: 0 0 30px rgba(156, 199, 242, .12); }
+.welcome-grid p { color: var(--ink-2); margin-bottom: 10px; }
+.welcome-step { margin-bottom: 4px !important; letter-spacing: .04em; }
+.welcome-lang { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.welcome-sev { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; gap: 8px; color: var(--ink-2); }
+.welcome-sev li { display: grid; grid-template-columns: 18px 1fr; align-items: baseline; }
+.welcome-sev b { color: var(--ink); }
+.welcome-sev .dot, .fs-mark .dot { width: 10px; height: 10px; transform: rotate(45deg) translateY(-1px); border-radius: 2px; flex: none; margin-right: 4px; display: inline-block; }
+.welcome-sev .dot.critical { background: var(--critical); box-shadow: 0 0 10px var(--critical); }
+.welcome-sev .dot.high { background: var(--high); }
+.welcome-sev .dot.advice { background: var(--advice); }
+.welcome-sev .dot.unknown { background: var(--unknown); }
+.welcome-sev .dot.ok { background: var(--ok); }
+.welcome-steps { list-style: decimal; margin: 4px 0 12px; padding-left: 22px; display: grid; gap: 6px; color: var(--ink-2); }
+.welcome-steps li::marker { color: var(--ice-mid); font-family: var(--display); }
+@media (max-width: 640px) {
+  .welcome-grid { grid-template-columns: 1fr; gap: 12px; }
+  .welcome-grid img { width: 112px; height: 112px; justify-self: center; }
+}
+
+.first-steps { margin-bottom: 18px; }
+.fs-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.fs-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.fs-list li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: rgba(156, 199, 242, .04); }
+.fs-list li.done { opacity: .6; }
+.fs-list li.done .fs-text b { text-decoration: line-through; text-decoration-color: rgba(156, 199, 242, .4); }
+.fs-mark { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--ice-line-hi); font-size: 12px; color: var(--ice-hi); }
+.fs-list li.done .fs-mark { border-color: var(--ok); color: var(--ok); }
+.fs-mark svg { width: 14px; height: 14px; }
+.fs-text { flex: 1; min-width: 0; }
+.fs-text p { margin: 2px 0 0; }
+@media (max-width: 640px) { .fs-list li { flex-wrap: wrap; } .fs-text { flex-basis: calc(100% - 38px); } .fs-list li > .btn { margin-left: 38px; } }

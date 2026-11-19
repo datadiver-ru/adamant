@@ -40,6 +40,8 @@ function createStore(dataDir) {
       if (typeof patch.away === 'boolean') s.away = patch.away;
       if (typeof patch.awayPhoto === 'boolean') s.awayPhoto = patch.awayPhoto;
       if (typeof patch.realtime === 'boolean') s.realtime = patch.realtime;
+      if (typeof patch.introDone === 'boolean') s.introDone = patch.introDone;
+      if (typeof patch.stepsHidden === 'boolean') s.stepsHidden = patch.stepsHidden;
       write('settings.json', s);
       return s;
     },

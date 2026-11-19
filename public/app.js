@@ -453,6 +453,102 @@
           btn(T('Позже'), 'small', () => { S.helperNudgeLater = true; render(); }))));
   }
 
+  // ------------------------------------------------------------ Знакомство и первые шаги
+  /** Знакомство для новичка: три коротких шага с Кирой. Само показывается один раз, потом - из «О программе». */
+  function welcomeModal() {
+    if (document.querySelector('.modal.welcome')) return;
+    if (!S.data.settings.introDone) api('/api/settings', { introDone: true }).then((s) => { S.data.settings = s; }).catch(() => {});
+    let step = 0;
+    const m = modal((box, close) => {
+      box.classList.add('welcome');
+      const STEPS = [
+        () => ({
+          img: 'img/kira-keeper.jpg',
+          title: T('Знакомьтесь: Адамант'),
+          body: [
+            h('p', { text: T('Адамант проверяет, хорошо ли защищён ваш компьютер: антивирус и брандмауэр, обновления, учётные записи, открытые порты, автозагрузку и домашнюю сеть. Всё найденное он объясняет простыми словами.') }),
+            h('p', { text: T('Сам он ничего не меняет. Каждое исправление вы сначала видите целиком, потом нажимаете «Применить», и его всегда можно отменить.') }),
+            h('div', { class: 'welcome-lang' }, h('span', { class: 'muted small', text: T('Язык') }),
+              h('div', { class: 'lang' }, [['ru', 'Русский'], ['en', 'English']].map(([id, label]) => h('button', { type: 'button', 'aria-pressed': String(S.data.settings.lang === id),
+                onclick: () => saveSettings({ lang: id }).then(draw) }, label)))),
+          ],
+        }),
+        () => ({
+          img: 'img/kira-sword.jpg',
+          title: T('Как читать результаты'),
+          body: [
+            h('ul', { class: 'welcome-sev' }, [
+              ['critical', T('опасно, исправьте в первую очередь.')],
+              ['high', T('серьёзное замечание, стоит исправить.')],
+              ['advice', T('можно сделать лучше, если хотите.')],
+              ['unknown', T('это видно только после «Проверить полностью».')],
+              ['ok', T('всё хорошо, ничего делать не нужно.')],
+            ].map(([s, text]) => h('li', null, h('i', { class: 'dot ' + s }), h('span', null, h('b', { text: SEV_LABEL[s]() }), ' - ', text)))),
+            h('p', { text: T('Нажмите на любую находку: там написано, чем это грозит и как исправить.') }),
+          ],
+        }),
+        () => ({
+          img: 'img/kira-knight.jpg',
+          title: T('С чего начать'),
+          body: [
+            h('ol', { class: 'welcome-steps' },
+              h('li', { text: T('Первая проверка запускается сама и идёт 10-20 секунд: программа только читает настройки.') }),
+              h('li', { text: T('Исправьте то, что отмечено как «Критично».') }),
+              h('li', { text: T('Поставьте помощника администратора - тогда Адамант увидит больше. Windows спросит разрешение один раз.') }),
+              h('li', { text: T('Включите работу в фоне: Адамант будет проверять компьютер раз в сутки и сообщит, только если появится что-то важное.') })),
+            h('p', { class: 'muted small', text: T('Окно Windows «Разрешить этому приложению вносить изменения?» должно появляться, только когда вы сами нажали кнопку. Если вы ничего не нажимали - выберите «Нет».') }),
+            h('p', { class: 'muted small', text: T('Эти шаги будут на «Сводке», пока вы их не сделаете.') }),
+          ],
+        }),
+      ];
+      function draw() {
+        const s = STEPS[step]();
+        const last = step === STEPS.length - 1;
+        const done = () => { close(); if (!report() && !S.busy) runCheck(false); };
+        box.replaceChildren(
+          h('div', { class: 'welcome-grid' },
+            h('img', { src: s.img, alt: '', width: 180, height: 180, decoding: 'async' }),
+            h('div', null, h('p', { class: 'welcome-step muted small', text: F('Шаг {0} из {1}', step + 1, STEPS.length) }), h('h2', { text: s.title }), kids(s.body))),
+          h('div', { class: 'foot' },
+            step ? btn(T('Назад'), 'ghost', () => { step -= 1; draw(); }) : btn(T('Пропустить'), 'ghost', close),
+            last ? btn(report() || S.busy ? T('Понятно') : T('Проверить компьютер'), 'primary', done, report() || S.busy ? '' : 'shield')
+              : btn(T('Дальше'), 'primary', () => { step += 1; draw(); })));
+        const f = box.querySelector('.foot button.primary');
+        if (f) f.focus();
+      }
+      draw();
+    });
+    const f = m.box.querySelector('.foot button.primary');
+    if (f) f.focus();
+  }
+
+  /** «Первые шаги» на сводке: что ещё сделать, с кнопкой рядом с каждым шагом. Пропадает, когда всё сделано. */
+  function firstSteps() {
+    const r = report();
+    if (!r || S.data.settings.stepsHidden) return null;
+    if (S.helper === undefined && !S.helperLoading) loadHelper();
+    const crit = allFindings().filter((f) => f.sev === 'critical').length;
+    const st = S.helper;
+    const helperOk = !!(st && st.installed);
+    const steps = [
+      { done: true, text: T('Проверить компьютер') },
+      { done: !crit, text: crit ? F('Исправить критичное (осталось: {0})', crit) : T('Исправить критичное'), act: btn(T('Показать'), 'small', () => go('pc', 'critical')) },
+      { done: helperOk, text: T('Поставить помощника администратора'), hint: T('Тогда Адамант видит BitLocker, журнал входов и исключения антивируса. Windows спросит разрешение один раз.'),
+        act: st === undefined || S.helperLoading ? null : btn(S.busy === 'helper' ? T('Устанавливаю…') : T('Установить'), 'small', () => helperAction('install'), 'shield') },
+      { done: !!S.data.settings.background, text: T('Включить работу в фоне'), hint: T('Проверка раз в сутки и уведомление, только если появилось что-то важное.'), act: btn(T('Включить'), 'small', () => saveSettings({ background: true })) },
+    ];
+    const left = steps.filter((s) => !s.done).length;
+    if (!left) return null;
+    return h('section', { class: 'card pad first-steps no-print' },
+      h('div', { class: 'fs-head' },
+        h('div', null, h('b', { text: T('Первые шаги') }), ' ', h('span', { class: 'muted small', text: F('сделано {0} из {1}', steps.length - left, steps.length) })),
+        btn(T('Скрыть'), 'ghost small', () => saveSettings({ stepsHidden: true }))),
+      h('ol', { class: 'fs-list' }, steps.map((s, i) => h('li', { class: s.done ? 'done' : '' },
+        h('span', { class: 'fs-mark' }, s.done ? icon('check') : String(i + 1)),
+        h('div', { class: 'fs-text' }, h('b', { text: s.text }), s.hint && !s.done ? h('p', { class: 'muted small', text: s.hint }) : null),
+        s.done ? null : s.act || null))));
+  }
+
   function viewSummary() {
     const r = report();
     if (!r) {
@@ -471,6 +567,7 @@
     const top = all.filter((f) => f.sev === 'critical' || f.sev === 'high');
     return h('div', { class: 'page' },
       helperNudge(),
+      firstSteps(),
       h('section', { class: 'hero ' + tone + (r.score ? ' grade-' + r.score.grade.id : '') }, h('div', { class: 'gem-col' }, h('div', { class: 'gem' }, gem()), r.score ? scoreBadge(r.score) : null),
         h('div', null,
           h('div', { class: 'status', text: headline }),
@@ -1969,6 +2066,7 @@
       h('div', { class: 'card pad' },
         h('p', null, h('b', { text: F('Адамант {0}', S.data.version) }), ' - ', T('проверка защиты компьютера с Windows и своей сети.')),
         updateBox(),
+        h('p', { class: 'actions' }, btn(T('Показать знакомство снова'), 'small', () => { if (S.data.settings.stepsHidden) saveSettings({ stepsHidden: false }); welcomeModal(); }, 'gem')),
         h('p', { class: 'legend', text: LEGEND() }),
         h('ul', { class: 'ev' },
           h('li', { text: tgEnabled() ? T('Программа не собирает статистику. В интернет уходят только тревоги в ваш Telegram - вы это включили.') : T('Программа сама ничего не отправляет в интернет и не собирает статистику.') }),
@@ -2277,6 +2375,8 @@
     }
     render();
     hideSplash();
+    // Первый запуск: знакомство, когда заставка уже ушла.
+    if (!S.data.settings.introDone && !report()) setTimeout(welcomeModal, Math.max(0, 3300 - (performance.now() - SPLASH_FROM)));
     setInterval(async () => {
       try {
         const hb = await api('/api/heartbeat', {});
