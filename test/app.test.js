@@ -84,6 +84,27 @@ test('без ключа, с чужим ключом или чужим Host - о�
   }
 });
 
+test('ничего не кэшируется: no-store на всех ответах, у окна почти нулевой кэш', async () => {
+  const s = await setup();
+  try {
+    await s.api('POST', '/api/check', {}, { Origin: `http://127.0.0.1:${s.port}` });
+    const all = [
+      await s.api('GET', '/api/state'),
+      await request(s.port, { route: '/' }),
+      await request(s.port, { route: '/app.js' }),
+      await request(s.port, { route: '/api/state' }), // 401
+      await request(s.port, { route: '/api/status' }),
+      await s.api('GET', '/report.html'),
+    ];
+    for (const r of all) assert.equal(r.headers['cache-control'], 'no-store', `${r.status} ${r.text.slice(0, 40)}`);
+    assert.ok(all[0].json.report, 'отчёт в ответе есть - тем важнее, чтобы он не оседал в кэше окна');
+  } finally {
+    await s.close();
+  }
+  const launch = fs.readFileSync(path.join(__dirname, '..', 'server', 'launch.js'), 'utf8');
+  assert.ok(launch.includes("'--disk-cache-size=1', '--media-cache-size=1'"), 'флаги окна против дискового кэша');
+});
+
 test('POST: только JSON и только со своего Origin', async () => {
   const s = await setup();
   try {

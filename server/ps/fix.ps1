@@ -51,6 +51,29 @@ function Save-Record([string]$rec, $data) {
   [IO.File]::WriteAllText($f, ($data | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding $false))
   & icacls.exe $f /setowner "*$ADMINS" /Q | Out-Null
 }
+# Старые версии хранили в записи отката пароль автовхода открытым текстом - убираем само значение.
+# Признак «пароль был записан» остаётся: откат скажет, что пароль нужно ввести заново.
+function Remove-StoredSecrets {
+  foreach ($f in @(Get-ChildItem -LiteralPath $Store -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
+    try {
+      if ((Get-OwnerSid $f.FullName) -notin @($ADMINS, $SYSTEM)) { continue }
+      $text = [IO.File]::ReadAllText($f.FullName)
+      if ($text -notmatch 'DefaultPassword') { continue }
+      $d = $text | ConvertFrom-Json
+      $hit = $false
+      $states = @()
+      if ($d.backup -is [array]) { $states += @($d.backup) } elseif ($d.backup) { $states += @($d.backup); if ($d.backup.regs) { $states += @($d.backup.regs) } }
+      foreach ($st in $states) {
+        if ($st -and $st.name -eq 'DefaultPassword' -and ($st.PSObject.Properties.Name -contains 'value')) {
+          $st.PSObject.Properties.Remove('value')
+          $st | Add-Member -NotePropertyName secret -NotePropertyValue $true -Force
+          $hit = $true
+        }
+      }
+      if ($hit) { Save-Record $f.BaseName $d }
+    } catch {}
+  }
+}
 function Load-Record([string]$rec) {
   $f = Join-Path $Store "$rec.json"
   if (-not (Test-Path -LiteralPath $f)) { throw 'Запись для отката не найдена' }
@@ -74,6 +97,8 @@ function Set-Reg([string]$path, [string]$name, $value, [string]$kind) {
   New-ItemProperty -LiteralPath $path -Name $name -Value $value -PropertyType $kind -Force | Out-Null
 }
 function Restore-Reg($st) {
+  # Пароль автовхода не сохранялся (см. Reg-Capture) - вернуть его нечем, человек введёт его заново.
+  if ($st.existed -and $st.secret) { return }
   if ($st.existed) { Set-Reg $st.path $st.name $st.value $st.kind }
   else { Remove-ItemProperty -LiteralPath $st.path -Name $st.name -ErrorAction SilentlyContinue }
 }
@@ -83,7 +108,14 @@ function Shown($st, [bool]$secret) {
   return $st.value
 }
 # Набор значений реестра: capture → change → undo.
-function Reg-Capture($specs) { return @($specs | ForEach-Object { Get-RegState $_.path $_.name }) }
+function Reg-Capture($specs) {
+  return @($specs | ForEach-Object {
+    $st = Get-RegState $_.path $_.name
+    # Секреты (пароль автовхода) в запись отката не попадают: там они лежали бы на диске открытым текстом.
+    if ($_.secret -and $st.existed) { $st.Remove('value'); $st.secret = $true }
+    $st
+  })
+}
 function Reg-Change($specs, $backup) {
   $changes = @()
   for ($i = 0; $i -lt $specs.Count; $i++) {
@@ -99,7 +131,14 @@ function Reg-Change($specs, $backup) {
 }
 function Reg-Undo($backup) {
   $changes = @()
-  foreach ($st in @($backup)) { Restore-Reg $st; $changes += Change $st.name (Msg 'восстановлено') (Shown $st ($st.name -eq 'DefaultPassword')) }
+  foreach ($st in @($backup)) {
+    Restore-Reg $st
+    if ($st.existed -and ($st.secret -or $st.name -eq 'DefaultPassword') -and -not ($st.PSObject.Properties.Name -contains 'value' -or ($st -is [Collections.IDictionary] -and $st.Contains('value')))) {
+      $changes += Change $st.name (Msg 'не сохранялся') (Msg 'введите пароль автовхода заново')
+    } else {
+      $changes += Change $st.name (Msg 'восстановлено') (Shown $st ($st.name -eq 'DefaultPassword'))
+    }
+  }
   return $changes
 }
 
@@ -604,6 +643,7 @@ try {
   $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   if (-not $isAdmin) { throw 'Нужны права администратора' }
   Ensure-Store
+  Remove-StoredSecrets
   if ($Action -eq 'apply') {
     if (-not $Fixes.ContainsKey($Id)) { throw "Неизвестное исправление: $Id" }
     $argObj = $null

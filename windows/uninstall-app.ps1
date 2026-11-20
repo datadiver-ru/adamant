@@ -20,6 +20,14 @@ if (Test-Path (Join-Path $InstallDir 'server\launch.js')) {
   Start-Sleep -Seconds 1
 }
 
+# Регистрация камня для «Тревоги» (server/stones.js) - только если она указывает на эту установку.
+$stone = Join-Path $env:LOCALAPPDATA 'DataDiver\stones\adamant.json'
+try {
+  $st = Get-Content -LiteralPath $stone -Raw -Encoding UTF8 | ConvertFrom-Json
+  $wipeJs = [string]@($st.wipe)[1]
+  if ($wipeJs -and $wipeJs.StartsWith($InstallDir.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { Remove-Item -LiteralPath $stone -Force -Confirm:$false }
+} catch {}
+
 # Помощник администратора (если ставили): спрашиваем и удаляем с разрешением UAC. Без помощника окна UAC нет.
 # Запускаем защищённую копию из Program Files (её не может подменить обычная программа), иначе - копию программы.
 $pf = [Environment]::GetEnvironmentVariable('ProgramW6432')

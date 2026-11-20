@@ -453,6 +453,105 @@
           btn(T('Позже'), 'small', () => { S.helperNudgeLater = true; render(); }))));
   }
 
+  /** Ключ данных не открылся (server/vault.js): объясняем и предлагаем начать заново. */
+  const VAULT_WHY = {
+    'key-missing': () => T('Файл ключа data.key пропал, а зашифрованные файлы остались.'),
+    'key-unreadable': () => T('Ключ данных не открылся. Так бывает, если папку данных перенесли на другой компьютер или в другую учётную запись или если пароль Windows сбросил администратор.'),
+    'key-mismatch': () => T('Ключ данных не подходит к сохранённым файлам: похоже, data.key взят из другой папки данных.'),
+    dpapi: () => T('Windows не дала защитить ключ данных.'),
+  };
+  function vaultNotice() {
+    const v = S.data && S.data.vault;
+    if (!v || v.state !== 'broken') return null;
+    const busy = S.busy === 'vault';
+    return h('div', { class: 'note warn vault-note no-print', role: 'alert' }, icon('lock'),
+      h('div', { class: 'note-body' },
+        h('b', { text: T('Сохранённые данные Адаманта не открылись') }),
+        h('p', { text: (VAULT_WHY[v.reason] || VAULT_WHY['key-unreadable'])() }),
+        h('p', { text: T('Прежние отчёты, журналы и ключ полной версии прочитать нельзя. Настройки на месте. Пока вы не начали заново, новые результаты хранятся только в памяти и пропадут, когда программа закроется.') }),
+        h('p', { class: 'muted small', text: T('«Начать заново» создаст новый ключ. Старые зашифрованные файлы не удаляются, а переносятся в папку «unreadable-…» внутри папки данных.') }),
+        h('div', { class: 'actions' },
+          btn(busy ? T('Начинаю…') : T('Начать заново'), 'primary small', vaultReset, 'refresh'))));
+  }
+  async function vaultReset() {
+    if (S.busy) return;
+    if (!confirm(T('Начать заново с новым ключом данных? Прежние отчёты и журналы останутся непрочитанными.'))) return;
+    S.busy = 'vault';
+    render();
+    try {
+      await api('/api/vault/reset', {});
+      await load();
+      toast(T('Готово: данные снова сохраняются, зашифрованные новым ключом.'), 'ok');
+    } catch (e) {
+      toast(F('Не получилось: {0}', T(e.message)), 'error');
+    } finally {
+      S.busy = null;
+      render();
+    }
+  }
+
+  // ------------------------------------------------------------ Уничтожить данные
+  /** «Данные на этом компьютере»: как хранятся и кнопка «Уничтожить данные» (server/wipe.js). */
+  function dataCard() {
+    const v = S.data.vault;
+    return [h('h2', { class: 'group', text: T('Данные на этом компьютере') }),
+      h('div', { class: 'card pad' },
+        h('p', { text: v && v.state === 'ok'
+          ? T('Отчёты, журналы, ключ полной версии и снимки «Пока вас не было» хранятся зашифрованными. Ключ защищён Windows для вашей учётной записи.')
+          : T('Данные Адаманта хранятся зашифрованными.') }),
+        h('p', { class: 'muted small', text: T('Если компьютер могут украсть или вы отдаёте его другому человеку, данные Адаманта можно уничтожить. Сначала стирается ключ: без него файлы уже не прочитать. Потом удаляется папка данных.') }),
+        h('p', { class: 'actions' }, btn(T('Уничтожить данные'), 'small danger', wipeModal, 'trash')))];
+  }
+
+  function wipeModal() {
+    modal((box, close) => {
+      const word = T('УНИЧТОЖИТЬ');
+      const input = h('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', 'aria-label': F('Введите слово {0}', word) });
+      const admin = h('input', { type: 'checkbox' });
+      const go = btn(T('Уничтожить'), 'danger', () => submit(), 'trash');
+      const submit = async () => {
+        if (input.value.trim().toUpperCase() !== word) { toast(F('Введите слово {0}', word), 'error'); input.focus(); return; }
+        box.dataset.locked = '1';
+        go.disabled = true;
+        try {
+          const r = await api('/api/wipe', { word: input.value.trim(), admin: admin.checked });
+          S.wiped = r;
+          close();
+          render();
+        } catch (e) {
+          delete box.dataset.locked;
+          go.disabled = false;
+          toast(F('Не получилось: {0}', T(e.message)), 'error');
+        }
+      };
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+      box.append(
+        h('h2', { text: T('Уничтожить данные Адаманта') }),
+        h('p', { text: T('Будут стёрты ключ данных и вся папка данных: отчёты, журнал исправлений, история, «Пока вас не было» со снимками, бот Telegram и ключ полной версии. Приманки из «Учений» будут убраны из папок.') }),
+        h('div', { class: 'note warn' }, icon('warn'), h('div', { text: T('Вернуть ничего нельзя. Ключ полной версии тоже удалится: если он ещё понадобится, сохраните его заранее.') })),
+        h('p', { class: 'muted small', text: T('Исправления в Windows останутся как есть, но откатить их из Адаманта уже не получится. Сам Адамант останется установленным и при следующем запуске начнёт с чистого листа. Окно закроется само.') }),
+        h('label', { class: 'check' }, admin, T('Также удалить записи для отката исправлений и ответы помощника администратора (Windows попросит разрешение)')),
+        h('label', { class: 'field' }, h('span', { class: 'muted small', text: F('Чтобы подтвердить, введите слово {0}', word) }), input),
+        h('div', { class: 'foot' }, btn(T('Отмена'), 'ghost', close), go));
+      setTimeout(() => input.focus(), 0);
+    });
+  }
+
+  /** После «Уничтожить»: данных больше нет, окно скоро закроет wipe.js. */
+  function wipedView() {
+    const r = S.wiped;
+    const left = Array.isArray(r.adminLeft) ? r.adminLeft : [];
+    return h('div', { class: 'busy' }, icon(r.keysDestroyed ? 'check' : 'warn'),
+      h('h2', { text: r.keysDestroyed ? T('Данные Адаманта уничтожены') : T('Ключ данных удалить не получилось') }),
+      h('p', { class: 'muted', text: r.keysDestroyed
+        ? T('Ключ данных стёрт, без него прежние файлы не прочитать. Папка данных удаляется, окно закроется само через несколько секунд.')
+        : T('Программа ещё раз попробует удалить ключ, когда закроется. Если не выйдет, перезагрузите компьютер и нажмите «Уничтожить данные» снова.') }),
+      r.decoysRemoved ? h('p', { class: 'muted', text: F('Приманки убраны: {0}', r.decoysRemoved) }) : null,
+      r.admin === 'cancelled' ? h('p', { class: 'muted', text: T('Записи для отката и ответы помощника остались: разрешение администратора не получено.') })
+        : left.length ? h('p', { class: 'muted', text: F('Не удалось удалить: {0}', left.join(', ')) }) : null,
+      h('p', { class: 'muted small', text: T('Адамант остался установленным: при следующем запуске он начнёт с чистого листа.') }));
+  }
+
   // ------------------------------------------------------------ Знакомство и первые шаги
   /** Знакомство для новичка: три коротких шага с Кирой. Само показывается один раз, потом - из «О программе». */
   function welcomeModal() {
@@ -552,7 +651,7 @@
   function viewSummary() {
     const r = report();
     if (!r) {
-      return h('div', { class: 'page' }, helperNudge(), h('div', { class: 'hero' }, h('div', { class: 'gem' }, gem()),
+      return h('div', { class: 'page' }, vaultNotice(), helperNudge(), h('div', { class: 'hero' }, h('div', { class: 'gem' }, gem()),
         h('div', null, h('h1', { text: T('Проверка ещё не проводилась') }), h('p', { text: T('Программа посмотрит настройки защиты Windows, открытые порты, учётные записи, автозагрузку, шифрование и загрузку компьютера. Она ничего не меняет без вашего разрешения.') }),
           h('p', { class: 'legend', text: LEGEND() }),
           h('div', { class: 'actions' }, btn(T('Проверить компьютер'), 'primary', () => runCheck(false), 'shield')))));
@@ -566,6 +665,7 @@
       : sum.high ? F('Серьёзных дыр нет, но важных замечаний: {0}.', sum.high) : T('Критичных и важных проблем не найдено.');
     const top = all.filter((f) => f.sev === 'critical' || f.sev === 'high');
     return h('div', { class: 'page' },
+      vaultNotice(),
       helperNudge(),
       firstSteps(),
       h('section', { class: 'hero ' + tone + (r.score ? ' grade-' + r.score.grade.id : '') }, h('div', { class: 'gem-col' }, h('div', { class: 'gem' }, gem()), r.score ? scoreBadge(r.score) : null),
@@ -2062,6 +2162,7 @@
       helperCard(),
       h('h2', { class: 'group', text: T('Версия') }),
       licenseCard(),
+      dataCard(),
       h('h2', { class: 'group', text: T('О программе') }),
       h('div', { class: 'card pad' },
         h('p', null, h('b', { text: F('Адамант {0}', S.data.version) }), ' - ', T('проверка защиты компьютера с Windows и своей сети.')),
@@ -2119,7 +2220,8 @@
   /** Открыт ли раздел полной версии (сервер проверяет то же самое сам). */
   const paid = (f) => !!(S.data && S.data.license && S.data.license.features && S.data.license.features[f]);
   const tgEnabled = () => !!(S.data && S.data.telegram && S.data.telegram.enabled && paid('telegram'));
-  const buyFull = () => api('/api/open', { target: 'shop-bot' }).catch((e) => toast(T(e.message), 'error'));
+  /** «Получить полную версию» открывает страницу программы на сайте (русскую или английскую). */
+  const buyFull = () => api('/api/open', { target: S.data && S.data.settings && S.data.settings.lang === 'en' ? 'download-en' : 'download' }).catch((e) => toast(T(e.message), 'error'));
 
   /** Что даёт каждый раздел полной версии. */
   const PAID_INFO = {
@@ -2194,8 +2296,8 @@
     }),
   };
 
-  /** Где взять ключ: нейтральная строка рядом с кнопкой «Получить полную версию». */
-  const keyWhere = () => h('p', { class: 'muted small', text: T('Ключ полной версии - в Telegram-боте Киры @datadiver_shop_bot') });
+  /** Подсказка рядом с «Получить полную версию»: та же строка, что на странице Адаманта на сайте. */
+  const fullHow = () => h('p', { class: 'muted small', text: T('Как получить полную версию - на странице Адаманта и в Telegram-канале Киры t.me/datadiver_ru') });
 
   function paidCard(feature) {
     const info = PAID_INFO[feature]();
@@ -2206,7 +2308,7 @@
       h('div', { class: 'actions' },
         btn(T('Получить полную версию'), 'primary', buyFull, 'gem'),
         btn(T('У меня есть ключ'), '', keyModal, 'lock')),
-      keyWhere());
+      fullHow());
   }
 
   /** Включить ключ (или убрать его - key = null). true - получилось. */
@@ -2268,13 +2370,13 @@
     const l = S.data.license || {};
     const full = l.edition === 'full';
     const text = full
-      ? (l.expires ? F('Ключ выдан: {0}. Действует до {1}.', l.licensee, l.expires) : F('Ключ выдан: {0}. Бессрочно.', l.licensee))
+      ? (l.expires ? F('Владелец ключа: {0}. Действует до {1}.', l.licensee, l.expires) : F('Владелец ключа: {0}. Бессрочно.', l.licensee))
       : l.expired ? F('Срок ключа для {0} закончился {1}. Работает бесплатная версия.', l.licensee, l.expires)
         : T('Проверка, находки, исправления, Страж, сеть, роутер, расширения, скачанные файлы, обновление программ, чек-лист и отчёт работают полностью. В полной версии ещё Bluetooth, «Защита входа», «Учения» с приманками, «Пока вас не было», Страж в реальном времени, кнопка «Тревога» и уведомления в Telegram.');
     const setKey = setLicenseKey;
     return h('div', { class: 'card pad' },
       h('div', { class: 'setting' },
-        h('div', null, h('b', { text: full ? T('Полная версия') : T('Бесплатная версия') }), h('p', { text }), full ? null : keyWhere()),
+        h('div', null, h('b', { text: full ? T('Полная версия') : T('Бесплатная версия') }), h('p', { text }), full ? null : fullHow()),
         full ? btn(T('Убрать ключ'), 'ghost', () => { if (confirm(T('Убрать ключ с этого компьютера? Разделы полной версии закроются.'))) setKey(null); }) : btn(T('Получить полную версию'), 'primary', buyFull, 'gem')),
       full ? null : h('div', { class: 'license-key' },
         h('textarea', { rows: '3', spellcheck: 'false', placeholder: 'ADAMANT1.…', 'aria-label': T('Ключ полной версии'), oninput: (e) => { S.licenseDraft = e.target.value; } }, S.licenseDraft || ''),
@@ -2300,6 +2402,7 @@
       return;
     }
     if (!S.data) return;
+    if (S.wiped) { app.replaceChildren(wipedView()); return; }
     const prevMain = app.querySelector('.main');
     const scroll = !resetScroll && prevMain ? prevMain.scrollTop : 0;
     const all = allFindings();
@@ -2379,9 +2482,10 @@
     }
     render();
     hideSplash();
-    // Первый запуск: знакомство, когда заставка уже ушла.
-    if (!S.data.settings.introDone && !report()) setTimeout(welcomeModal, Math.max(0, 3300 - (performance.now() - SPLASH_FROM)));
+    // Первый запуск: знакомство, когда заставка уже ушла. Если ключ данных не открылся, это не первый запуск - не путаем.
+    if (!S.data.settings.introDone && !report() && !(S.data.vault && S.data.vault.state === 'broken')) setTimeout(welcomeModal, Math.max(0, 3300 - (performance.now() - SPLASH_FROM)));
     setInterval(async () => {
+      if (S.wiped) return;
       try {
         const hb = await api('/api/heartbeat', {});
         // Тревога от приманок: показываем сразу, не дожидаясь действий человека.

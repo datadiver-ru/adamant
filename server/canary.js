@@ -69,7 +69,7 @@ const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 const isOurName = (p) => NAMES.includes(path.basename(p));
 
-function createCanary({ dataDir, dirs, fs = nodeFs, onAlert = () => {}, now = () => Date.now(), hide = defaultHide, verifyMs = VERIFY_MS, debounceMs = DEBOUNCE_MS } = {}) {
+function createCanary({ dataDir, store = null, dirs, fs = nodeFs, onAlert = () => {}, now = () => Date.now(), hide = defaultHide, verifyMs = VERIFY_MS, debounceMs = DEBOUNCE_MS } = {}) {
   if (!dataDir) throw new Error('dataDir required');
   const manifestPath = path.join(dataDir, MANIFEST);
   let watchers = [];
@@ -82,13 +82,15 @@ function createCanary({ dataDir, dirs, fs = nodeFs, onAlert = () => {}, now = ()
 
   function readManifest() {
     try {
-      const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      // С store список лежит зашифрованным (server/vault.js); без него (тесты) - обычным файлом.
+      const m = store ? store.read(MANIFEST, null) : JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       return m && Array.isArray(m.files) ? m : null;
     } catch {
       return null;
     }
   }
   function writeManifest(m) {
+    if (store) { store.write(MANIFEST, m); return; }
     fs.mkdirSync(dataDir, { recursive: true });
     const tmp = `${manifestPath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(m, null, 1), { mode: 0o600 });

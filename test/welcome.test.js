@@ -29,7 +29,8 @@ test('настройки: знакомство и «Первые шаги» за
 
 test('окно: знакомство само показывается только при первом запуске, без проверки', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
-  assert.match(src, /if \(!S\.data\.settings\.introDone && !report\(\)\) setTimeout\(welcomeModal/);
+  // И не тогда, когда ключ данных не открылся: это не первый запуск, отчёт просто не прочитан.
+  assert.match(src, /if \(!S\.data\.settings\.introDone && !report\(\) && !\(S\.data\.vault && S\.data\.vault\.state === 'broken'\)\) setTimeout\(welcomeModal/);
   for (const img of ['kira-keeper.jpg', 'kira-sword.jpg', 'kira-knight.jpg']) {
     assert.ok(src.includes(`img/${img}`));
     assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'img', img)), img);

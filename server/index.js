@@ -11,6 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { loadConfig } = require('./config');
 const { createStore } = require('./store');
+const { createVault } = require('./vault');
 const { createApp } = require('./app');
 const { createRunner, createAutorun } = require('./runner');
 const { openTarget } = require('./guides');
@@ -21,14 +22,19 @@ const { createAway } = require('./away');
 const { createHelper } = require('./helper');
 const { createRealtime } = require('./realtime');
 const { createTelegram } = require('./telegram');
+const { createWiper, spawnWipeCli } = require('./wipe');
+const { register } = require('./stones');
+const ps = require('./ps');
 const os = require('node:os');
 
 const IDLE_MS = 3 * 60_000;
 const BACKGROUND_EVERY = 24 * 3600_000;
 
-function main() {
+async function main() {
   const cfg = loadConfig();
-  const store = createStore(cfg.dataDir);
+  // Данные хранятся зашифрованными (server/vault.js); ключ открываем после захвата server.lock.
+  const vault = createVault({ dataDir: cfg.dataDir });
+  const store = createStore(cfg.dataDir, { vault });
   const lockFile = path.join(cfg.dataDir, 'server.lock');
   // Один сервер на папку данных.
   try {
@@ -46,6 +52,19 @@ function main() {
     }
     fs.writeFileSync(lockFile, String(process.pid));
   }
+  // Первый запуск после обновления: создать ключ и перешифровать открытые файлы. Ключ не открылся -
+  // программа работает дальше, окно объясняет, что случилось, и предлагает «Начать заново».
+  try {
+    const vs = await vault.open();
+    if (vs.migrated) console.log(`Данные зашифрованы: файлов ${vs.migrated}`);
+    if (vs.migrateErrors) console.error('Шифрование данных:', vs.migrateErrors.join('; '));
+    if (vs.state !== 'ok') console.error(`Ключ данных не открылся: ${vs.reason}`);
+  } catch (e) {
+    console.error('Ключ данных:', e.message);
+  }
+
+  // Регистрация камня: по ней «Тревога» найдёт команду уничтожения данных (server/stones.js).
+  try { register({ dataDir: cfg.dataDir, version: cfg.version, root: cfg.root }); } catch (e) { console.error('Регистрация камня:', e.message); }
 
   const key = crypto.randomBytes(24).toString('base64url');
   const runner = createRunner(cfg.dataDir);
@@ -64,17 +83,17 @@ function main() {
   // Папки для приманок: сразу - по профилю, затем точные пути Windows (с учётом переноса в OneDrive).
   const canaryDirs = defaultDirs();
   knownDirs().then((d) => { if (d && d.length) canaryDirs.splice(0, canaryDirs.length, ...d); }).catch(() => {});
-  const canary = createCanary({ dataDir: cfg.dataDir, dirs: canaryDirs, onAlert: (a) => app && app.raiseAlert({ kind: 'canary', ...a }) });
+  const canary = createCanary({ dataDir: cfg.dataDir, store, dirs: canaryDirs, onAlert: (a) => app && app.raiseAlert({ kind: 'canary', ...a }) });
   // «Пока вас не было»: работает, пока запущен значок в трее (он сообщает о блокировке и сне).
   const helper = createHelper({ tmpDir: cfg.dataDir });
   const away = createAway({
-    store, dataDir: cfg.dataDir,
+    store, vault, dataDir: cfg.dataDir,
     helperSecurity: () => helper.readSecurity(),
     watchDirs: () => [...canaryDirs, path.join(process.env.USERPROFILE || os.homedir(), 'Downloads')],
     selfBusy: () => !!(app && app.state.busy), // своя проверка (powershell) не считается чужой программой
   });
   // Telegram (полная версия): выключено, пока человек сам не включит; отправляет только короткие тревоги.
-  const telegram = createTelegram({ dataDir: cfg.dataDir, lang: () => store.settings().lang });
+  const telegram = createTelegram({ dataDir: cfg.dataDir, store, lang: () => store.settings().lang });
   const tgOn = () => !!(app && app.paid('telegram'));
   const notify = (a) => (tgOn() ? telegram.notifyAlert(a.kind, app.alertText(store.settings().lang, a)) : null);
   // Страж в реальном времени (полная версия): работает, пока работает программа, и если не выключен в настройках.
@@ -90,7 +109,14 @@ function main() {
       if (want) live.start(); else live.stop();
     },
   };
-  app = createApp({ store, key, version: cfg.version, runner, autorun: createAutorun(cfg.dataDir), openTarget, guard, drills, canary, away, helper, realtime, notify, telegram });
+  // «Уничтожить данные»: приманки, ключ и часть с UAC - сразу; закрыть программу и удалить папку - отдельным процессом.
+  const wiper = createWiper({
+    dataDir: cfg.dataDir, root: cfg.root, vault, canary,
+    stopWatchers: () => { away.stop(); live.stop(); },
+    runAdmin: () => ps.runElevated('wipe-admin.ps1', [], { tmpDir: os.tmpdir() }),
+    spawnCli: () => spawnWipeCli({ dataDir: cfg.dataDir }),
+  });
+  app = createApp({ store, key, version: cfg.version, runner, autorun: createAutorun(cfg.dataDir), openTarget, guard, drills, canary, away, helper, realtime, notify, telegram, vault, wiper });
   realtime.sync();
   // После обновления: автозапуск через adamant.vbs → через Adamant.exe (только своё значение и только при работе в фоне).
   if (store.settings().background) {
@@ -146,4 +172,4 @@ function main() {
   }, 30 * 60_000);
 }
 
-main();
+main().catch((e) => { console.error(e && e.stack || e); process.exit(1); });

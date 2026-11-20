@@ -53,7 +53,7 @@ async function ensureServer() {
   fs.mkdirSync(cfg.dataDir, { recursive: true });
   const log = fs.openSync(path.join(cfg.dataDir, 'server.log'), 'a');
   spawn(process.execPath, [path.join(__dirname, 'index.js'), `--data=${cfg.dataDir}`], { cwd: cfg.root, detached: true, windowsHide: true, stdio: ['ignore', log, log] }).unref();
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < 200; i++) {
     await sleep(150);
     if ((s = await alive())) return s;
   }
@@ -76,6 +76,9 @@ function openWindow(s) {
   if (browser) {
     spawn(browser, [
       `--app=${url}`, `--user-data-dir=${path.join(cfg.dataDir, 'window')}`, '--no-first-run', '--no-default-browser-check',
+      // Кэш окна почти нулевой: ответы программы (отчёт и прочее) не должны оседать в профиле открытым текстом.
+      // Сервер и так отвечает Cache-Control: no-store, это вторая страховка.
+      '--disk-cache-size=1', '--media-cache-size=1',
       '--disable-sync', '--disable-features=Translate,msEdgeSidebarV2,msUndersideButton', '--window-size=1240,860', '--lang=' + (readLang() === 'en' ? 'en-US' : 'ru'),
     ], { detached: true, stdio: 'ignore' }).unref();
   } else {

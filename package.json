@@ -1,6 +1,6 @@
 {
   "name": "adamant-guard",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "description": "Адамант - проверка защиты компьютера с Windows и своей домашней или офисной сети. Без внешних зависимостей, ничего не отправляет в интернет.",
   "main": "server/index.js",

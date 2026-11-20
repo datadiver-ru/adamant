@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Инструмент автора: выпуск ключей полной версии Адаманта. Запускается только у автора -
- * закрытый ключ (adamant-license-private.pem) не передаётся покупателю и не кладётся в дистрибутив.
+ * закрытый ключ (adamant-license-private.pem) не передаётся владельцу ключа и не кладётся в дистрибутив.
  *
  *   node tools/license.js issue --key C:\Users\...\Adamant-vendor\adamant-license-private.pem --licensee "Иван П." [--expires 2027-12-31]
  *   node tools/license.js verify ADAMANT1....
@@ -22,7 +22,7 @@ try {
     const keyPath = opt('key');
     if (!keyPath) throw new Error('Укажите --key: путь к закрытому ключу автора');
     const licensee = opt('licensee');
-    if (!licensee) throw new Error('Укажите --licensee: кому выдан ключ (имя или название)');
+    if (!licensee) throw new Error('Укажите --licensee: на чьё имя ключ (имя или название)');
     const expires = opt('expires') || null;
     if (expires && !/^\d{4}-\d{2}-\d{2}$/.test(expires)) throw new Error('--expires в формате ГГГГ-ММ-ДД');
     const key = lic.issue({ licensee, expires }, fs.readFileSync(keyPath, 'utf8'));

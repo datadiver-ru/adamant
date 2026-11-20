@@ -240,6 +240,7 @@ const PHOTO_ERRORS = {
   timeout: t('камера не ответила'),
   'no-answer': t('значок в трее не ответил'),
   'bad-file': t('снимок не сохранился'),
+  locked: t('ключ данных Адаманта не открылся - снимок не сохранён'),
 };
 
 // ---------------------------------------------------------------- настоящие источники
@@ -309,7 +310,7 @@ function defaultWatchDirs() {
 function createAway({
   store = null, dataDir, now = () => Date.now(), listProcesses = null, watchDirs = defaultWatchDirs, readLogons = null,
   settings = null, fs = nodeFs, owner = (() => { try { return os.userInfo().username; } catch { return ''; } })(),
-  selfBusy = () => false, ignoreDirs = [], watchFs = null, helperSecurity = null,
+  selfBusy = () => false, ignoreDirs = [], watchFs = null, helperSecurity = null, vault = null,
 } = {}) {
   if (!dataDir) throw new Error('dataDir required');
   const ownPids = new Set([process.pid]);
@@ -615,6 +616,19 @@ function createAway({
     return p ? { id: p.id } : null;
   }
   const photoFile = (id) => path.join(photosDir, `${id}.jpg`);
+  const photoName = (id) => `away/photos/${id}.jpg`;
+  /** Снимок с диска - открытые байты (с vault снимок хранится зашифрованным) или null. */
+  function readPhoto(id) {
+    try {
+      const st = fs.statSync(photoFile(id));
+      if (!st.isFile() || st.size > PHOTO_MAX_BYTES + 64) return null;
+      let buf = fs.readFileSync(photoFile(id));
+      if (vault) buf = vault.decode(photoName(id), buf);
+      return buf.length >= 100 && buf.length <= PHOTO_MAX_BYTES && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff ? buf : null;
+    } catch {
+      return null;
+    }
+  }
   /** Ответ значка: {id, ok, error?}. Файл значок кладёт только в away/photos/<id>.jpg - сервер проверяет, что это JPEG. */
   function photoDone(body) {
     if (!isObj(body) || typeof body.id !== 'string' || !PHOTO_ID.test(body.id) || typeof body.ok !== 'boolean') throw bad('photo');
@@ -626,16 +640,15 @@ function createAway({
     const s = J.spans.find((x) => x.id === p.span);
     let ok = body.ok;
     let error = ok ? null : (ERR_CODE.test(body.error || '') ? body.error : 'error');
-    if (ok) {
+    if (ok && !readPhoto(p.id)) { ok = false; error = 'bad-file'; }
+    // Снимок сразу шифруем; если ключ данных не открыт - не храним вовсе (открытым он лежать не должен).
+    if (ok && vault) {
       try {
-        const st = fs.statSync(photoFile(p.id));
-        const head = Buffer.alloc(3);
-        const fd = fs.openSync(photoFile(p.id), 'r');
-        try { fs.readSync(fd, head, 0, 3, 0); } finally { fs.closeSync(fd); }
-        if (!st.isFile() || st.size < 100 || st.size > PHOTO_MAX_BYTES || head[0] !== 0xff || head[1] !== 0xd8 || head[2] !== 0xff) throw new Error('not jpeg');
-      } catch {
+        if (!vault.ready()) throw new Error('locked');
+        vault.sealFile(photoFile(p.id));
+      } catch (e) {
         ok = false;
-        error = 'bad-file';
+        error = e && e.message === 'locked' ? 'locked' : 'bad-file';
       }
     }
     if (!ok) { try { fs.unlinkSync(photoFile(p.id)); } catch { /* нет файла */ } }
@@ -648,13 +661,8 @@ function createAway({
   function photoData(id) {
     if (typeof id !== 'string' || !PHOTO_ID.test(id)) throw bad('id');
     if (!J.spans.some((s) => s.photos.some((p) => p.id === id && p.ok))) return null;
-    try {
-      const buf = fs.readFileSync(photoFile(id));
-      if (buf.length > PHOTO_MAX_BYTES || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
-      return `data:image/jpeg;base64,${buf.toString('base64')}`;
-    } catch {
-      return null;
-    }
+    const buf = readPhoto(id);
+    return buf ? `data:image/jpeg;base64,${buf.toString('base64')}` : null;
   }
 
   // ---- уборка

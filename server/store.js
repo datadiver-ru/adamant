@@ -7,25 +7,38 @@
  *   settings.json - язык, работа в фоне
  *   server.json   - порт и ключ работающего сервера (только для ярлыка и значка в трее)
  * Запись атомарная: во временный файл, затем переименование.
+ *
+ * С vault (server/vault.js) файлы хранятся зашифрованными, кроме settings.json и server.*.
+ * Если ключ данных не открылся, новые записи держатся только в памяти (на диск открытым текстом
+ * ничего не пишется), а после «Начать заново» сохраняются уже с новым ключом.
  */
 const fs = require('node:fs');
 const path = require('node:path');
 
-function createStore(dataDir) {
+function createStore(dataDir, { vault = null } = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const file = (n) => path.join(dataDir, n);
+  const mem = new Map();
+  const locked = (name) => !!vault && !vault.ready() && !vault.isPlainName(name);
   function read(name, fallback) {
+    if (mem.has(name)) return JSON.parse(mem.get(name));
     try {
-      return JSON.parse(fs.readFileSync(file(name), 'utf8'));
+      const buf = fs.readFileSync(file(name));
+      return JSON.parse((vault ? vault.decode(name, buf) : buf).toString('utf8'));
     } catch {
       return fallback;
     }
   }
   function write(name, value) {
+    const text = JSON.stringify(value, null, 1);
+    if (locked(name)) { mem.set(name, text); return; }
     const tmp = file(`${name}.${process.pid}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 1), { mode: 0o600 });
+    fs.writeFileSync(tmp, vault ? vault.encode(name, Buffer.from(text, 'utf8')) : text, { mode: 0o600 });
     fs.renameSync(tmp, file(name));
+    mem.delete(name);
   }
+  // После «Начать заново» - сохранить то, что набралось в памяти.
+  if (vault) vault.onReady(() => { for (const [n, text] of [...mem]) write(n, JSON.parse(text)); });
   const DEFAULT_SETTINGS = { lang: 'ru', background: false, canary: false, away: false, awayPhoto: false, realtime: true };
   return {
     dataDir,

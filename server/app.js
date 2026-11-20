@@ -73,7 +73,7 @@ function carryOverAdmin(facts, prev, nowMs = Date.now()) {
   return prev.fullAt;
 }
 
-function createApp({ store, key, version, runner, autorun = { set: async () => {} }, openTarget = () => {}, now = () => Date.now(), guard = null, drills = null, canary = null, away = null, helper = null, licensePublicKey, realtime = null, notify = null, telegram = null, updateFetch = undefined }) {
+function createApp({ store, key, version, runner, autorun = { set: async () => {} }, openTarget = () => {}, now = () => Date.now(), guard = null, drills = null, canary = null, away = null, helper = null, licensePublicKey, realtime = null, notify = null, telegram = null, updateFetch = undefined, vault = null, wiper = null }) {
   const state = { busy: null, lastSeen: now(), progress: null, port: 0, alerts: [], quietUntil: 0 };
   // Свои изменения системы (исправление, откат, автозапуск, обновление программ) Страж в реальном времени не считает чужими.
   const QUIET_MS = 2 * 60_000;
@@ -660,7 +660,30 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
       panic: store.read('panic.json', null),
       ports: safe(() => (report() ? require('./ports').annotate(report().facts, store.journal()) : null), null),
       telegram: telegram ? safe(() => telegram.status(), null) : null,
+      vault: vault ? safe(() => vault.state(), null) : null,
     }),
+    // Ключ данных пропал или не открылся: старые файлы - в unreadable-<время>, новый ключ, данные из памяти сохраняются.
+    'POST /api/vault/reset': async () => {
+      if (!vault) throw new HttpError(400, t('Шифрование данных выключено'));
+      const st = await vault.reset();
+      return { vault: st };
+    },
+    // «Уничтожить данные»: только со словом из окна. После этого программа закрывается и удаляет папку данных.
+    'POST /api/wipe': async (b) => {
+      if (!wiper) throw new HttpError(501, t('Уничтожение данных недоступно'));
+      if (!require('./wipe').wordOk(b && b.word)) throw new HttpError(400, t('Введите слово УНИЧТОЖИТЬ, чтобы подтвердить'));
+      if (state.busy) throw new HttpError(409, t('Подождите: идёт другая операция'));
+      state.busy = 'wipe';
+      try {
+        const r = await wiper.run({ admin: !!(b && b.admin === true) });
+        // Данных больше нет: проверки и исправления до закрытия программы не запускаются.
+        state.busy = 'wiped';
+        return r;
+      } catch (e) {
+        state.busy = null;
+        throw e instanceof HttpError ? e : new HttpError(500, e.message);
+      }
+    },
     'POST /api/panic': (b) => panic({ mode: (b && b.mode) === 'restore' ? 'restore' : 'isolate' }),
     'GET /api/telegram': () => tgCall(() => telegram.status()),
     'POST /api/telegram': (b) => {

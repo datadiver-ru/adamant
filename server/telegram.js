@@ -57,18 +57,20 @@ const REASON = {
   TG: t('Telegram ответил ошибкой. Попробуйте позже.'),
 };
 
-function createTelegram({ dataDir, base = 'https://api.telegram.org', post = postJson, now = () => Date.now(), lang = () => 'ru' } = {}) {
+function createTelegram({ dataDir, store = null, base = 'https://api.telegram.org', post = postJson, now = () => Date.now(), lang = () => 'ru' } = {}) {
   const file = path.join(dataDir, FILE);
   let queue = Promise.resolve();
   let lastSend = 0;
 
   function read() {
     let j = {};
-    try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { j = {}; }
+    // С store токен лежит зашифрованным (server/vault.js); без него (тесты) - обычным файлом.
+    try { j = store ? store.read(FILE, {}) || {} : JSON.parse(fs.readFileSync(file, 'utf8')); } catch { j = {}; }
     return { ...DEFAULTS, ...j, events: { ...DEFAULTS.events, ...(j.events || {}) }, sent: Array.isArray(j.sent) ? j.sent : [] };
   }
   function write(c) {
-    fs.writeFileSync(file, JSON.stringify(c, null, 1), { mode: 0o600 });
+    if (store) store.write(FILE, c);
+    else fs.writeFileSync(file, JSON.stringify(c, null, 1), { mode: 0o600 });
     return c;
   }
 
