@@ -2119,7 +2119,7 @@
   /** Открыт ли раздел полной версии (сервер проверяет то же самое сам). */
   const paid = (f) => !!(S.data && S.data.license && S.data.license.features && S.data.license.features[f]);
   const tgEnabled = () => !!(S.data && S.data.telegram && S.data.telegram.enabled && paid('telegram'));
-  const buyFull = () => api('/api/open', { target: 'contact-telegram' }).catch((e) => toast(T(e.message), 'error'));
+  const buyFull = () => api('/api/open', { target: 'shop-bot' }).catch((e) => toast(T(e.message), 'error'));
 
   /** Что даёт каждый раздел полной версии. */
   const PAID_INFO = {
@@ -2194,6 +2194,9 @@
     }),
   };
 
+  /** Где взять ключ: нейтральная строка рядом с кнопкой «Получить полную версию». */
+  const keyWhere = () => h('p', { class: 'muted small', text: T('Ключ полной версии - в Telegram-боте Киры @datadiver_shop_bot') });
+
   function paidCard(feature) {
     const info = PAID_INFO[feature]();
     return h('div', { class: 'card pad paid' },
@@ -2201,8 +2204,9 @@
       h('ul', { class: 'ev' }, info.points.map((p) => h('li', { text: p }))),
       info.free ? h('p', { class: 'muted small', text: info.free }) : null,
       h('div', { class: 'actions' },
-        btn(T('Купить полную версию'), 'primary', buyFull, 'gem'),
-        btn(T('У меня есть ключ'), '', keyModal, 'lock')));
+        btn(T('Получить полную версию'), 'primary', buyFull, 'gem'),
+        btn(T('У меня есть ключ'), '', keyModal, 'lock')),
+      keyWhere());
   }
 
   /** Включить ключ (или убрать его - key = null). true - получилось. */
@@ -2237,7 +2241,7 @@
       };
       box.append(
         h('h2', { text: T('Ввести ключ') }),
-        h('p', { class: 'muted', text: T('Вставьте ключ, который пришёл после покупки, и нажмите «Активировать». Ключ проверяется на этом компьютере, без интернета.') }),
+        h('p', { class: 'muted', text: T('Вставьте ключ полной версии и нажмите «Активировать». Ключ проверяется на этом компьютере, без интернета.') }),
         h('div', { class: 'license-key' }, area),
         h('div', { class: 'foot' }, btn(T('Отмена'), 'ghost', close), btn(T('Активировать'), 'primary', submit, 'lock')));
       setTimeout(() => area.focus(), 0);
@@ -2270,8 +2274,8 @@
     const setKey = setLicenseKey;
     return h('div', { class: 'card pad' },
       h('div', { class: 'setting' },
-        h('div', null, h('b', { text: full ? T('Полная версия') : T('Бесплатная версия') }), h('p', { text })),
-        full ? btn(T('Убрать ключ'), 'ghost', () => { if (confirm(T('Убрать ключ с этого компьютера? Разделы полной версии закроются.'))) setKey(null); }) : btn(T('Купить полную версию'), 'primary', buyFull, 'gem')),
+        h('div', null, h('b', { text: full ? T('Полная версия') : T('Бесплатная версия') }), h('p', { text }), full ? null : keyWhere()),
+        full ? btn(T('Убрать ключ'), 'ghost', () => { if (confirm(T('Убрать ключ с этого компьютера? Разделы полной версии закроются.'))) setKey(null); }) : btn(T('Получить полную версию'), 'primary', buyFull, 'gem')),
       full ? null : h('div', { class: 'license-key' },
         h('textarea', { rows: '3', spellcheck: 'false', placeholder: 'ADAMANT1.…', 'aria-label': T('Ключ полной версии'), oninput: (e) => { S.licenseDraft = e.target.value; } }, S.licenseDraft || ''),
         btn(T('Активировать'), '', () => { if ((S.licenseDraft || '').trim()) setKey(S.licenseDraft.trim()); else toast(T('Вставьте ключ полной версии'), 'error'); }, 'lock')));

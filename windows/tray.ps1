@@ -21,6 +21,17 @@ Add-Type -AssemblyName System.Drawing
 
 $wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $vbs = Join-Path $Root 'windows\adamant.vbs'
+# Adamant.exe есть в установленной программе; в папке разработки - только adamant.vbs.
+$exe = Join-Path $Root 'Adamant.exe'
+function Start-Adamant([string]$arg) {
+  if (Test-Path -LiteralPath $exe) {
+    if ($arg) { Start-Process -FilePath $exe -ArgumentList $arg -WorkingDirectory $Root } else { Start-Process -FilePath $exe -WorkingDirectory $Root }
+  } else {
+    $a = '"' + $vbs + '"'
+    if ($arg) { $a += ' ' + $arg }
+    Start-Process -FilePath $wscript -ArgumentList $a
+  }
+}
 $serverFile = Join-Path $Data 'server.json'
 $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $cameraPs1 = Join-Path $Root 'windows\camera.ps1'
@@ -56,7 +67,7 @@ function Say([string]$text, [string]$icon = 'Info') {
   $tray.BalloonTipIcon = $icon
   $tray.ShowBalloonTip(8000)
 }
-function Open-App { Start-Process -FilePath $wscript -ArgumentList ('"' + $vbs + '"') }
+function Open-App { Start-Adamant '' }
 function Quit {
   $timer.Stop(); $eventTimer.Stop(); $camTimer.Stop()
   try { Get-EventSubscriber | Where-Object { $_.SourceIdentifier -like 'Adamant.*' } | Unregister-Event } catch { }
@@ -194,7 +205,7 @@ function Poll {
     $r = Api '/api/tray'
   } catch {
     # Сервер завершился - запускаем снова (только сервер, без окна).
-    Start-Process -FilePath $wscript -ArgumentList ('"' + $vbs + '" --background')
+    Start-Adamant '--background'
     return
   }
   if ($r.exit) { Quit; return }

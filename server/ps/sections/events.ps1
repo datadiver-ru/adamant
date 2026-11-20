@@ -149,14 +149,13 @@ Section 'events' {
 
   # ---------- PowerShell: блоки сценариев, которые Windows сама пометила подозрительными ----------
   # Windows помечает по ключевым словам, поэтому много шума: модули Windows (cmdletization), сам Адамант.
-  # Отдельно считаем «сильный» признак: код скачивается из интернета и сразу запускается. Список нарочно
-  # короткий: подробные сигнатуры атак в самом сценарии антивирус блокирует как вредоносные.
+  # Здесь только отбор и счёт: тексты свежих блоков уходят в программу, а «сильный» признак (код
+  # скачивается и сразу запускается) ищет server/psblocks.js. Образцов атак в сценарии PowerShell нет:
+  # их антивирус принимает за инструмент атаки (так было с PSAttackTool в ноябре 2026).
   try {
-    $psr = [ordered]@{ suspicious = 0; strong = 0; samples = @() }
-    $strongRe = '(?i)(DownloadString|DownloadData|Net\.WebClient|Invoke-WebRequest|\biwr\b).{0,300}(\bIEX\b|Invoke-E[x]pression)|(\bIEX\b|Invoke-E[x]pression).{0,100}(DownloadString|FromBase64String)'
+    $psr = [ordered]@{ suspicious = 0; blocks = @() }
     $ev = GuardEvents 'Microsoft-Windows-PowerShell/Operational' "*[System[(EventID=4104) and (Level=3) and $guardTw]]" 1000
-    $strongS = New-Object System.Collections.ArrayList
-    $weakS = New-Object System.Collections.ArrayList
+    $blocks = New-Object System.Collections.ArrayList
     foreach ($e in $ev) {
       if ((GuardProp $e 0) -ne '1') { continue }
       $path = GuardProp $e 4
@@ -164,11 +163,9 @@ Section 'events' {
       $text = GuardProp $e 2
       if ($text -match '__cmdletization|PowerShell\.Core\\.et-StrictMode -Off') { continue }
       $psr.suspicious++
-      $one = [ordered]@{ at = IsoDate $e.TimeCreated; path = $path; text = (GuardCut2 ($text -replace '\s+', ' ') 150) }
-      if ($text -match $strongRe) { $psr.strong++; if ($strongS.Count -lt 5) { [void]$strongS.Add($one) } }
-      elseif ($weakS.Count -lt 3) { [void]$weakS.Add($one) }
+      if ($blocks.Count -lt 60) { [void]$blocks.Add([ordered]@{ at = IsoDate $e.TimeCreated; path = $path; text = (GuardCut2 ($text -replace '\s+', ' ') 400) }) }
     }
-    $psr.samples = @(@($strongS) + @($weakS) | Select-Object -First 5)
+    $psr.blocks = @($blocks)
     $r.powershell = $psr
   } catch { $r.errors.powershell = $_.Exception.Message }
 

@@ -100,12 +100,18 @@ description             UEFI: Generic USB
   assert.deepEqual(parseBcdFirmware('The boot configuration data store could not be opened.'), []);
 });
 
-test('значок в трее запускается через tray.vbs, а не напрямую powershell.exe', () => {
+test('значок в трее: через Adamant.exe (или tray.vbs в папке разработки), а не напрямую powershell.exe', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'runner.js'), 'utf8');
-  const body = src.slice(src.indexOf('function startTray'), src.indexOf('function execReg'));
+  const from = src.indexOf('function startTray');
+  const body = src.slice(from, src.indexOf('\n}\n', from));
   // powershell.exe с detached остаётся без консоли и завершается; без detached - гибнет вместе с Node.
-  assert.ok(body.includes('tray.vbs') && body.includes('WSCRIPT'));
-  assert.ok(!body.includes('ps.POWERSHELL'), 'startTray не должен запускать powershell.exe напрямую');
+  assert.ok(body.includes("spawn(LAUNCHER, ['--tray-icon', dataDir]"), 'в установленной программе - Adamant.exe');
+  assert.ok(body.includes('tray.vbs') && body.includes('WSCRIPT'), 'запасной путь для папки разработки');
+  assert.ok(!body.includes('POWERSHELL'), 'startTray не должен запускать powershell.exe напрямую');
+  const cs = fs.readFileSync(path.join(__dirname, '..', 'windows', 'launcher', 'Launcher.cs'), 'utf8');
+  assert.ok(cs.includes('"--tray-icon"') && cs.includes('tray.ps1') && cs.includes('CreateNoWindow = true'), 'Adamant.exe: значок скрытым процессом');
+  assert.ok(cs.includes("data.IndexOf('\"') >= 0 || !Directory.Exists(data)"), 'Adamant.exe отклоняет кавычки и несуществующую папку');
+  assert.doesNotMatch(cs, /-WindowStyle|EncodedCommand|DownloadString|WebClient/i);
   const vbs = fs.readFileSync(path.join(__dirname, '..', 'windows', 'tray.vbs'), 'utf8');
   assert.ok(vbs.includes('tray.ps1') && /,\s*0\s*,\s*False/.test(vbs), 'tray.vbs: скрытое окно и без ожидания');
   assert.ok(/InStr\(data, """"\) > 0/.test(vbs), 'tray.vbs отклоняет кавычки в пути к данным');

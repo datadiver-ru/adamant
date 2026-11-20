@@ -3,7 +3,7 @@
  * Сборка дистрибутива: dist/Adamant-<версия>-win-x64.zip
  *   Adamant-<версия>/
  *     Установить Адамант.cmd    - установка в один щелчок (без прав администратора)
- *     Запустить без установки.vbs - запуск прямо из папки
+ *     Adamant.exe - запуск прямо из папки (windows/launcher/Launcher.cs, собирается здесь же)
  *     Прочитайте.txt
  *     server/ public/ windows/   - программа
  *     runtime/node.exe           - Node.js, на котором прошли тесты: ставить его отдельно не нужно
@@ -34,31 +34,39 @@ const crlf = (s) => Buffer.from(s.replace(/\r?\n/g, '\r\n'), 'utf8');
 /** Состав программы (общий для сборки и тестов). */
 function appFiles() {
   const files = [];
-  for (const d of ['server', 'public', 'windows']) for (const f of walk(d)) if (!f.startsWith('windows/setup/')) files.push({ name: f, data: fs.readFileSync(path.join(ROOT, f)) });
+  for (const d of ['server', 'public', 'windows']) for (const f of walk(d)) if (!f.startsWith('windows/setup/') && !f.startsWith('windows/launcher/')) files.push({ name: f, data: fs.readFileSync(path.join(ROOT, f)) });
   for (const f of ['package.json', 'LICENSE', 'README.md', 'SECURITY.md', 'CHANGELOG.md']) {
     if (fs.existsSync(path.join(ROOT, f))) files.push({ name: f, data: fs.readFileSync(path.join(ROOT, f)) });
   }
   return files;
 }
 
+/** Adamant.exe: запуск без окна консоли вместо скриптов VBS (компилятор C# из .NET Framework 4, как у установщика). */
+function buildLauncher() {
+  const win = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows';
+  const csc = ['Framework64', 'Framework'].map((fw) => path.join(win, 'Microsoft.NET', fw, 'v4.0.30319', 'csc.exe')).find((p) => fs.existsSync(p));
+  if (!csc) throw new Error('Не найден компилятор C# из .NET Framework 4 (csc.exe)');
+  const tmp = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'adamant-launcher-'));
+  try {
+    const out = path.join(tmp, 'Adamant.exe');
+    require('node:child_process').execFileSync(csc, ['/nologo', '/target:winexe', '/optimize+', '/codepage:65001', `/out:${out}`,
+      `/win32icon:${path.join(ROOT, 'windows', 'adamant.ico')}`, path.join(ROOT, 'windows', 'launcher', 'Launcher.cs')], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    return fs.readFileSync(out);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 function launchers() {
   return [
     { name: 'Установить Адамант.cmd', data: crlf('@echo off\nrem Адамант: установка на этот компьютер для текущего пользователя (без прав администратора).\nchcp 65001 >nul\npowershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows\\install-app.ps1" %*\npause\n') },
-    { name: 'Запустить без установки.vbs', data: crlf(`' Adamant: run from this folder without installing.
-Option Explicit
-Dim sh, fso, root
-Set sh = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-root = fso.GetParentFolderName(WScript.ScriptFullName)
-sh.CurrentDirectory = root
-sh.Run """" & root & "\\runtime\\node.exe"" """ & root & "\\server\\launch.js""", 0, False
-`) },
+    { name: 'Adamant.exe', data: buildLauncher() },
     { name: 'Прочитайте.txt', data: crlf(`Адамант ${pkg.version} - проверка защиты компьютера с Windows и своей сети
 
 УСТАНОВКА
   Дважды щёлкните «Установить Адамант.cmd». Права администратора не нужны.
   Программа появится на рабочем столе и в меню «Пуск», удаляется через «Параметры» → «Приложения».
-  Без установки: «Запустить без установки.vbs» (отчёты сохраняются в папке data рядом).
+  Без установки: дважды щёлкните Adamant.exe (отчёты сохраняются в папке data рядом).
 
 ЧТО ДЕЛАЕТ
   - Проверяет брандмауэр, антивирус, SMBv1, удалённый рабочий стол, UAC, учётные записи, автозагрузку,
@@ -73,8 +81,9 @@ sh.Run """" & root & "\\runtime\\node.exe"" """ & root & "\\server\\launch.js"""
   Изменения - только по вашей кнопке, прежние значения сохраняются для отката.
 
 БРАУЗЕР ИЛИ WINDOWS ПРЕДУПРЕЖДАЮТ - ЭТО ОЖИДАЕМО
-  Адамант пока не подписан платным сертификатом разработчика, а Windows и браузеры
-  предупреждают о любой новой программе, которую скачало мало людей. Вируса в файле от этого нет.
+  Адамант пока не подписан сертификатом разработчика, а Windows и браузеры
+  предупреждают о любой новой программе, которую скачало мало людей.
+  Само предупреждение не значит, что в файле вирус.
   - Браузер не даёт скачать: откройте список загрузок (стрелка справа вверху), нажмите на файл
     или на «...» рядом с ним и выберите «Сохранить» / «Всё равно сохранить» / «Скачать».
   - Синее окно «Система Windows защитила ваш компьютер»: нажмите «Подробнее»,

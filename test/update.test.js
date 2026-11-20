@@ -39,6 +39,9 @@ test('обновления: запрос только на api.github.com по h
   assert.doesNotMatch(src, /process\.env|userInfo|os\.hostname|require\('node:os'\)/, 'никаких сведений о компьютере');
   assert.deepEqual(OPEN_TARGETS.download.cmd.slice(1), ['https://datadiver-ru.github.io/adamant.html']);
   assert.deepEqual(OPEN_TARGETS['download-en'].cmd.slice(1), ['https://datadiver-ru.github.io/en/adamant.html']);
+  // «Получить полную версию» ведёт в бот с ключами, а не в канал.
+  assert.deepEqual(OPEN_TARGETS['shop-bot'].cmd.slice(1), ['https://t.me/datadiver_shop_bot']);
+  assert.ok(fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8').includes("const buyFull = () => api('/api/open', { target: 'shop-bot' })"));
 });
 
 test('сервер: «Проверить обновления» - только по запросу окна, ошибка сети понятна', async () => {

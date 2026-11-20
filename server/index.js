@@ -92,6 +92,11 @@ function main() {
   };
   app = createApp({ store, key, version: cfg.version, runner, autorun: createAutorun(cfg.dataDir), openTarget, guard, drills, canary, away, helper, realtime, notify, telegram });
   realtime.sync();
+  // После обновления: автозапуск через adamant.vbs → через Adamant.exe (только своё значение и только при работе в фоне).
+  if (store.settings().background) {
+    const ar = createAutorun(cfg.dataDir);
+    ar.migrate().then((done) => { if (done) console.log('Автозапуск: теперь через Adamant.exe'); }).catch((e) => console.error('Автозапуск:', e.message));
+  }
   // Лицензию могут ввести или она может закончиться - сверяемся раз в 30 секунд. Там же - «Пока вас не было» для Telegram.
   setInterval(() => {
     try { realtime.sync(); } catch (e) { console.error('Страж:', e.message); }

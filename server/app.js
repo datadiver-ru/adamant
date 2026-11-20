@@ -27,6 +27,7 @@ const rulesDownloads = require('./rules-downloads');
 const { score, pushHistory } = require('./score');
 const { createGuard, ownTaskMatcher, ownAutorunMatcher } = require('./guard');
 const { mergeHelper, TASKS: HELPER_TASKS } = require('./helper');
+const { digestFacts } = require('./psblocks');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webp': 'image/webp', '.jpg': 'image/jpeg' };
@@ -94,6 +95,7 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
       }
       const facts = await runner.collect(full && !viaHelper);
       if (!facts || facts.format !== 'adamant-facts') throw new Error(t('Сценарий проверки вернул неожиданный ответ'));
+      digestFacts(facts);
       const prev = report();
       let helperAt = null;
       if (helper && !facts.isAdmin) {
@@ -115,7 +117,10 @@ function createApp({ store, key, version, runner, autorun = { set: async () => {
       if (helper && typeof helper.trust === 'function' && helper.paths) {
         try { if ((await helper.trust()).trusted) own.push(ownTaskMatcher(helper.paths, HELPER_TASKS)); } catch { /* помощник не проверился - как чужие */ }
       }
-      if (autorun.name && autorun.command && store.read('settings.json', {}).background === true) own.push(ownAutorunMatcher(autorun.name, autorun.command));
+      if (autorun.name && autorun.command && store.read('settings.json', {}).background === true) {
+        own.push(ownAutorunMatcher(autorun.name, autorun.command));
+        if (autorun.legacyCommand) own.push(ownAutorunMatcher(autorun.name, autorun.legacyCommand));
+      }
       const isOwn = own.length ? (c) => own.some((m) => m(c)) : null;
       try { guardRes = watch.update(facts, { isOwn }) || guardRes; } catch (e) { console.error('Страж:', e.message); }
       const at = new Date(now()).toISOString();

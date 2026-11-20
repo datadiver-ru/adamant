@@ -537,8 +537,12 @@ class SetupForm : Form {
   void OnMain(object sender, EventArgs e) {
     if (step == Step.Done) {
       ApplyShortcutChoice();
+      string exe = Path.Combine(installDir, "Adamant.exe");
       string vbs = Path.Combine(installDir, "windows", "adamant.vbs");
-      try { Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "wscript.exe"), "\"" + vbs + "\"") { UseShellExecute = false, WorkingDirectory = installDir }); } catch { }
+      try {
+        if (File.Exists(exe)) Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = installDir });
+        else Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "wscript.exe"), "\"" + vbs + "\"") { UseShellExecute = false, WorkingDirectory = installDir });
+      } catch { }
       Close();
       return;
     }

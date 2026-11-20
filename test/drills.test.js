@@ -38,10 +38,19 @@ test('drill.ps1: BOM, нет учебных строк EICAR/AMSI в откры�
   assert.equal(literal(68, EICAR_SHA), false, 'строка EICAR в открытом виде');
   assert.equal(literal(54, AMSI_SHA), false, 'строка AMSI в открытом виде');
   assert.equal(/EICAR-STANDARD|AMSI Test Sample|7e72c3ce/i.test(src), false);
-  // Коды символов в сценарии дают ровно стандартные строки.
-  const codes = (name) => String.fromCharCode(...new RegExp(`\\$${name}\\s*=\\s*@\\(([\\d,\\s]+)\\)`).exec(src)[1].split(',').map(Number));
-  assert.equal(sha(codes('EicarCodes')), EICAR_SHA);
-  assert.equal(sha(codes('AmsiCodes')), AMSI_SHA);
+  // В сценарии нет ни кодов символов, ни кодирования и запуска «зашифрованных» команд:
+  // учебные строки приходят от программы через стандартный ввод.
+  assert.doesNotMatch(src, /EicarCodes|AmsiCodes|FromCodes|-EncodedCommand|ToBase64String|FromBase64String|\[char\]/i);
+  assert.match(src, /ReadSample 68/);
+  assert.match(src, /ReadSample 54/);
+  assert.match(src, /-Command -'/);
+  // Программа передаёт ровно стандартные строки, а в самом drills.js они только кодами.
+  const { drillInput } = require('../server/drills');
+  assert.equal(sha(JSON.parse(drillInput('eicar')).sample), EICAR_SHA);
+  assert.equal(sha(JSON.parse(drillInput('amsi')).sample), AMSI_SHA);
+  assert.equal(drillInput('cfa'), null);
+  const js = fs.readFileSync(path.join(ROOT, 'server/drills.js'), 'utf8');
+  assert.equal(/EICAR-STANDARD|AMSI Test Sample/i.test(js), false);
   const body = src.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   const WRITE = /\b(Set-\w+|New-ItemProperty|New-Item\b|Remove-\w+|Disable-\w+|Enable-\w+|Stop-\w+|Start-Service|Restart-\w+|Add-MpPreference|Rename-\w+|Clear-\w+|Invoke-Expression|RunAs|reg(\.exe)?\s+(add|delete)|netsh\b|bcdedit\b)\b/i;
   const m = WRITE.exec(body);

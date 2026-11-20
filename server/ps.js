@@ -39,7 +39,7 @@ function lowerPriority(child) {
   try { if (child && child.pid) os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* не страшно */ }
 }
 
-function runJson(name, args = [], { timeout = 180_000 } = {}) {
+function runJson(name, args = [], { timeout = 180_000, input = null } = {}) {
   return new Promise((resolve, reject) => {
     const child = execFile(POWERSHELL, [...BASE, '-File', scriptPath(name), ...args],
       { windowsHide: true, timeout, maxBuffer: 64 * 1024 * 1024, encoding: 'utf8' },
@@ -51,6 +51,8 @@ function runJson(name, args = [], { timeout = 180_000 } = {}) {
           reject(new Error(`${name}: ${e.message}. ${String(stderr || '').trim().slice(0, 300)}`));
         }
       });
+    // Данные для сценария (например, учебная строка учений) - через стандартный ввод, не в командной строке.
+    if (input != null && child.stdin) child.stdin.end(String(input));
     lowerPriority(child);
   });
 }

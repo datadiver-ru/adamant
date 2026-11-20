@@ -3,6 +3,7 @@
  * Связь с Windows: сценарии PowerShell (только чтение - collect, network; исправления - fix с правами администратора),
  * автозапуск значка в трее (HKCU\...\Run - только для текущего пользователя, без прав администратора).
  */
+const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
 const ps = require('./ps');
@@ -15,6 +16,9 @@ const ROOT = path.resolve(__dirname, '..');
 const WSCRIPT = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
 const REG = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
+/** Adamant.exe - запуск без окна консоли (windows/launcher/Launcher.cs); есть только в собранной программе. */
+const LAUNCHER = path.join(ROOT, 'Adamant.exe');
+const hasLauncher = () => fs.existsSync(LAUNCHER);
 const EXPLORER = path.join(process.env.SystemRoot || 'C:\\Windows', 'explorer.exe');
 const MPCMDRUN = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Windows Defender', 'MpCmdRun.exe');
 
@@ -42,7 +46,7 @@ function createRunner(dataDir) {
     bluetooth: (seconds = 10) => ps.runJson('bluetooth.ps1', ['-Seconds', String(Math.max(0, Math.min(20, Number(seconds) || 0)))], { timeout: 90_000 }),
     fix: (args) => ps.runElevated('fix.ps1', args, { tmpDir: dataDir }),
     // Учения: безвредные тесты защиты (drill.ps1), без прав администратора.
-    drill: (id) => ps.runJson('drill.ps1', ['-Drill', id], { timeout: 90_000 }),
+    drill: (id) => ps.runJson('drill.ps1', ['-Drill', id], { timeout: 90_000, input: require('./drills').drillInput(id) }),
     probe: netscan.probe,
     // Имена устройств своей сети (mDNS, NetBIOS, роутер) - только при «Найти устройства».
     deviceNames: (ips, opts) => devnames.lookup(ips, opts),
@@ -70,8 +74,29 @@ function createRunner(dataDir) {
  * wscript.exe - оконная программа, ей консоль не нужна, а PowerShell от неё получает свою скрытую консоль и живёт сам по себе.
  */
 function startTray(dataDir) {
-  const child = spawn(WSCRIPT, [path.join(ROOT, 'windows', 'tray.vbs'), dataDir], { detached: true, stdio: 'ignore', windowsHide: true });
+  // Adamant.exe (в установленной программе) делает то же без скрипта VBS; в папке разработки его нет.
+  const child = hasLauncher()
+    ? spawn(LAUNCHER, ['--tray-icon', dataDir], { detached: true, stdio: 'ignore', windowsHide: true })
+    : spawn(WSCRIPT, [path.join(ROOT, 'windows', 'tray.vbs'), dataDir], { detached: true, stdio: 'ignore', windowsHide: true });
   child.unref();
+}
+
+/**
+ * Значение автозапуска текущего пользователя (null - нет такого). Через PowerShell, а не reg.exe:
+ * reg.exe пишет русские буквы в старой кодировке консоли, и путь вида C:\Users\Пользователь не совпал бы.
+ */
+function queryRun(name) {
+  if (!/^[A-Za-z0-9 ._-]{1,64}$/.test(name)) return Promise.resolve(null);
+  const cmd = "[Console]::OutputEncoding = New-Object Text.UTF8Encoding $false; "
+    + "$v = (Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run' -Name '" + name + "' -ErrorAction SilentlyContinue).'" + name + "'; "
+    + 'if ($v) { [Console]::Out.Write([string]$v) }';
+  return new Promise((resolve) => {
+    execFile(ps.POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true, timeout: 30_000, encoding: 'utf8' }, (err, stdout) => {
+      if (err) return resolve(null);
+      const v = String(stdout || '').trim();
+      resolve(v || null);
+    });
+  });
 }
 
 function execReg(args) {
@@ -81,13 +106,27 @@ function execReg(args) {
 }
 
 /** Команда автозапуска, которую пишет «Работа в фоне» (Страж узнаёт её как свою). */
-const autorunCommand = () => `"${WSCRIPT}" "${path.join(ROOT, 'windows', 'adamant.vbs')}" --tray`;
+const legacyAutorunCommand = () => `"${WSCRIPT}" "${path.join(ROOT, 'windows', 'adamant.vbs')}" --tray`;
+const autorunCommand = () => (hasLauncher() ? `"${LAUNCHER}" --tray` : legacyAutorunCommand());
 
 /** Работа в фоне: значок в трее при входе в Windows. */
 function createAutorun(dataDir) {
   return {
     name: 'Adamant',
     command: autorunCommand(),
+    /** Прежняя команда (через adamant.vbs) - тоже своя, пока автозапуск не переписан. */
+    legacyCommand: legacyAutorunCommand(),
+    /**
+     * После обновления: автозапуск ещё через adamant.vbs, а рядом уже есть Adamant.exe - переписываем
+     * на Adamant.exe. Трогаем только своё значение и только если оно ровно прежнее.
+     */
+    async migrate() {
+      if (!hasLauncher()) return false;
+      const now = await queryRun('Adamant');
+      if (now == null || now.toLowerCase() !== legacyAutorunCommand().toLowerCase()) return false;
+      await execReg(['add', RUN_KEY, '/v', 'Adamant', '/t', 'REG_SZ', '/d', autorunCommand(), '/f']);
+      return true;
+    },
     async set(on) {
       if (on) {
         const cmd = autorunCommand();
@@ -100,4 +139,4 @@ function createAutorun(dataDir) {
   };
 }
 
-module.exports = { createRunner, createAutorun, startTray, ROOT };
+module.exports = { createRunner, createAutorun, startTray, ROOT, LAUNCHER, queryRun };

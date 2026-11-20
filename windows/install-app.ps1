@@ -60,6 +60,9 @@ Write-Host "2. Папка данных $DataDir ..."
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
 $vbs = Join-Path $InstallDir 'windows\adamant.vbs'
+# Adamant.exe - запуск без окна консоли; adamant.vbs остаётся только для старых ярлыков и автозапуска.
+$exe = Join-Path $InstallDir 'Adamant.exe'
+$useExe = Test-Path -LiteralPath $exe
 $ico = Join-Path $InstallDir 'windows\adamant.ico'
 $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
 if (-not $NoShortcuts) {
@@ -67,8 +70,7 @@ if (-not $NoShortcuts) {
   $shell = New-Object -ComObject WScript.Shell
   function New-Link($path, $description) {
     $l = $shell.CreateShortcut($path)
-    $l.TargetPath = $wscript
-    $l.Arguments = '"' + $vbs + '"'
+    if ($useExe) { $l.TargetPath = $exe; $l.Arguments = '' } else { $l.TargetPath = $wscript; $l.Arguments = '"' + $vbs + '"' }
     $l.WorkingDirectory = $InstallDir
     $l.IconLocation = $ico + ',0'
     $l.Description = $description
@@ -94,7 +96,7 @@ Write-Host ''
 Write-Host "Готово. Программа: $InstallDir"
 Write-Host "        Данные:    $DataDir"
 if (-not $NoLaunch) {
-  Start-Process -FilePath $wscript -ArgumentList ('"' + $vbs + '"')
+  if ($useExe) { Start-Process -FilePath $exe -WorkingDirectory $InstallDir } else { Start-Process -FilePath $wscript -ArgumentList ('"' + $vbs + '"') }
   Write-Host 'Адамант откроется в своём окне и сразу проверит компьютер.'
 }
 # Явный код выхода: иначе установщик .exe увидел бы код последней внешней программы (robocopy возвращает 1 при успехе).

@@ -306,4 +306,19 @@ function createDrills({ store, runDrill, exposure: runExposure, now = () => Date
   };
 }
 
-module.exports = { DRILLS, createDrills, exposure, describe, ownPrivateIps, RISKY };
+/**
+ * Учебные строки для drill.ps1: стандартный файл EICAR (68 символов) и учебная строка AMSI (54).
+ * Хранятся кодами символов, чтобы антивирус не принял за угрозу сами файлы программы, и уходят
+ * в сценарий через стандартный ввод - не в командной строке и не внутри сценария PowerShell.
+ */
+const SAMPLE_CODES = {
+  eicar: [88,53,79,33,80,37,64,65,80,91,52,92,80,90,88,53,52,40,80,94,41,55,67,67,41,55,125,36,69,73,67,65,82,45,83,84,65,78,68,65,82,68,45,65,78,84,73,86,73,82,85,83,45,84,69,83,84,45,70,73,76,69,33,36,72,43,72,42],
+  amsi: [65,77,83,73,32,84,101,115,116,32,83,97,109,112,108,101,58,32,55,101,55,50,99,51,99,101,45,56,54,49,98,45,52,51,51,57,45,56,55,52,48,45,48,97,99,49,52,56,52,99,49,51,56,54],
+};
+/** Что передать drill.ps1 на стандартный ввод (null - учению ничего не нужно). */
+function drillInput(id) {
+  const c = SAMPLE_CODES[id];
+  return c ? JSON.stringify({ sample: String.fromCharCode(...c) }) : null;
+}
+
+module.exports = { DRILLS, createDrills, exposure, describe, ownPrivateIps, RISKY, drillInput, SAMPLE_CODES };

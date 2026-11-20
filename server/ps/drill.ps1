@@ -2,9 +2,9 @@
 # Сценарий НЕ меняет настройки Windows и не требует прав администратора.
 # Он создаёт только свои файлы и сам их удаляет:
 #   eicar - учебный файл EICAR в своей временной папке %TEMP%\Adamant-drill-<guid> (папка удаляется);
-#   amsi  - дочерний PowerShell вычисляет учебную строку AMSI (строка ничего не делает);
+#   amsi  - дочерний PowerShell получает учебную строку AMSI через стандартный ввод (строка ничего не делает);
 #   cfa   - один текстовый файл Adamant-check-<guid>.txt в «Документах» (если записался - сразу удаляется).
-# Учебные строки EICAR и AMSI собираются из кодов символов во время работы,
+# Учебные строки EICAR и AMSI сценарий получает от программы через стандартный ввод (server/drills.js),
 # чтобы антивирус не принял за угрозу сам этот сценарий.
 #   powershell -File drill.ps1 -Drill eicar              → JSON в stdout
 #   powershell -File drill.ps1 -Drill eicar -Out f.json  → JSON в файл
@@ -17,15 +17,18 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
 
-# Стандартная учебная строка EICAR (68 символов) и учебная строка AMSI - коды символов.
-$EicarCodes = @(88,53,79,33,80,37,64,65,80,91,52,92,80,90,88,53,52,40,80,94,41,55,67,67,41,55,125,36,69,73,67,65,82,45,83,84,65,78,68,65,82,68,45,65,78,84,73,86,73,82,85,83,45,84,69,83,84,45,70,73,76,69,33,36,72,43,72,42)
-$AmsiCodes = @(65,77,83,73,32,84,101,115,116,32,83,97,109,112,108,101,58,32,55,101,55,50,99,51,99,101,45,56,54,49,98,45,52,51,51,57,45,56,55,52,48,45,48,97,99,49,52,56,52,99,49,51,56,54)
+# Учебные строки EICAR и AMSI приходят от программы через стандартный ввод (server/drills.js):
+# в самом сценарии их нет ни в каком виде, и запуск не похож на «расшифровку и выполнение».
+function ReadSample([int]$len) {
+  try { $o = [Console]::In.ReadToEnd() | ConvertFrom-Json } catch { return $null }
+  $s = [string]$o.sample
+  if ($s.Length -ne $len) { return $null }
+  return $s
+}
 
 # Коды ошибок Windows: «файл содержит вирус», «вирус удалён», «доступ запрещён».
 $VirusHResults = @(-2147024671, -2147024670)
 $AccessDenied = -2147024891
-
-function FromCodes([int[]]$codes) { return -join ($codes | ForEach-Object { [char]$_ }) }
 
 function Result([string]$status, $ms, [string]$detail) {
   return [ordered]@{ drill = $Drill; status = $status; ms = [int64]$ms; detail = $detail }
@@ -44,7 +47,8 @@ function EicarDrill {
   if (-not $tmp) { $tmp = [IO.Path]::GetTempPath() }
   $dir = Join-Path $tmp ('Adamant-drill-' + $id)
   $file = Join-Path $dir 'adamant-eicar-test.com'
-  $text = FromCodes $EicarCodes
+  $text = ReadSample 68
+  if (-not $text) { return Result 'error' 0 'no-sample' }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $res = $null
   try {
@@ -99,17 +103,24 @@ function EicarDrill {
 # ---------- Учебный вредный сценарий (AMSI) ----------
 function AmsiDrill {
   $marker = 'ADAMANT-AMSI-RAN'
-  $cmd = "`$s = '" + (FromCodes $AmsiCodes) + "'; [Console]::Out.Write('" + $marker + "')"
-  $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+  $sample = ReadSample 54
+  if (-not $sample) { return Result 'error' 0 'no-sample' }
+  # Учебный сценарий - обычной строкой через стандартный ввод (-Command -), без кодирования.
+  $cmd = "`$s = '" + $sample + "'; [Console]::Out.Write('" + $marker + "')"
   $psi = New-Object Diagnostics.ProcessStartInfo
   $psi.FileName = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $psi.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + $enc
+  $psi.Arguments = '-NoProfile -NonInteractive -Command -'
+  $psi.RedirectStandardInput = $true
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
   $sw = [Diagnostics.Stopwatch]::StartNew()
+  # Без этого Windows ставит в начало ввода метку кодировки (BOM), и первая команда не узнаётся.
+  try { [Console]::InputEncoding = New-Object Text.UTF8Encoding $false } catch {}
   $p = [Diagnostics.Process]::Start($psi)
+  $p.StandardInput.WriteLine($cmd)
+  $p.StandardInput.Close()
   $so = $p.StandardOutput.ReadToEndAsync()
   $se = $p.StandardError.ReadToEndAsync()
   if (-not $p.WaitForExit(20000)) {
